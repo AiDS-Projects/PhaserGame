@@ -300,6 +300,10 @@ async function main() {
   check('levelBuilder clamps physics world bounds', /world\.setBounds\s*\(/.test(builder));
   check('levelBuilder clamps camera bounds', /cameras\.main\.setBounds\s*\(/.test(builder));
   check('levelBuilder renders ground and platforms', /addGround\s*\(/.test(builder) && /addPlatform\s*\(/.test(builder));
+  check(
+    'levelBuilder converts hex colors via shared util',
+    /from\s+['"]\.\.\/utils\/color['"]/.test(builder) && /hexToNumber\s*\(/.test(builder),
+  );
 
   // --- 7. Background (GameScene.ts + constants.ts) --------------------------
   const scene = sceneSrc ?? '';

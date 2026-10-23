@@ -1,5 +1,3 @@
-File written and verified working (it correctly flags the currently-corrupted `package.json`). Full content below.
-
 #!/usr/bin/env node
 /**
  * scripts/verify-files.mjs

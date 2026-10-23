@@ -1,0 +1,39 @@
+# asset_manifest.yaml — 初始化 Vite + Phaser 3 + TypeScript 脚手架
+# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+assets:
+  - id: asset_001
+    type: icon
+    description: 本工单为空壳脚手架, 背景使用 Phaser 内置纯色填充 (无图片资源), 故无需引入图标/插画/图片。
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_002
+    type: icon
+    description: 当前资产清单: 无 (empty)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_003
+    type: icon
+    description: 后续玩法工单预留 (本工单不交付, 仅登记线索):
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_004
+    type: icon
+    description: icon: jump-button (二段跳按键提示, 48px, outline 风格)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_005
+    type: icon
+    description: icon: dash-button (冲刺按键提示, 48px, outline 风格)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_006
+    type: icon
+    description: icon: pause (暂停按钮, 24px, outline 风格)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_007
+    type: illustration
+    description: illustration: empty-level (关卡无内容占位, 400×300)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_008
+    type: photo
+    description: image: player-spritesheet (主角待机/跑动/跳跃帧序列图, 供后续动画工单)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_009
+    type: icon
+    description: 说明: 上述资产均不属于本工单范围, 依据 PRD「不包含美术资源」边界条件, 本工单 UI 资产交付量为 0。
+    status: pending  # 待美术Agent确认来源和规格

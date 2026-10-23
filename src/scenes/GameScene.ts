@@ -1,21 +1,22 @@
 import Phaser from 'phaser';
-import { SceneKey, COLORS } from '../constants';
+import { COLORS, SceneKey } from '../constants';
 
-// Empty shell scene for the scaffold: registers itself under SceneKey.Game,
-// clears its own listeners on create, and paints a solid-color background.
-// Platformer features (player, platforms, gravity, camera follow) land here later.
+// Empty shell scene: solid background + lifecycle hooks, ready for the
+// movement / double-jump / dash tickets to build on.
 export class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: SceneKey.Game });
   }
 
   create(): void {
-    // Avoid leaking scene-level listeners across restarts.
-    this.events.removeAllListeners();
+    // scene.start() reuses the instance, so clear listeners to avoid leaks.
+    this.input.removeAllListeners();
 
-    // Solid-color background (mirrors gameConfig.backgroundColor; owned here for clarity).
+    // Solid-color background (no texture), per the visual spec.
     this.cameras.main.setBackgroundColor(COLORS.bg);
 
-    // TODO(platformer): spawn player + platforms, enable arcade gravity, add camera follow.
+    // TODO(platformer): future tickets extend here.
+    // - player sprite: double jump + dash
+    // - HUD: score / lives / key hints
   }
 }

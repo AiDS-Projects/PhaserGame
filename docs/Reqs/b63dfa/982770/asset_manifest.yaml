@@ -1,32 +1,4 @@
 # asset_manifest.yaml — 初始化 Vite + Phaser 3 + TypeScript 脚手架
-# 由 ArtistAgent 落地更新
-# status: sourced=命中资产库 / placeholder=占位图待替换 / manual_required=需人工提供 / not_found=未命中
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: refresh
-    type: icon
-    description: 加载失败重试按钮图标 24px outline 风格
-    status: sourced
-    path: icons/tabler/refresh.svg
-    matched_name: refresh
-    asset_db_id: AST-006595
-    match_score: 1.0
-  - id: loading_spinner
-    type: icon
-    description: 启动加载指示 24px outline 风格
-    status: placeholder
-    path: docs/Reqs/b63dfa/982770/assets/placeholder/loading_spinner.png
-  - id: empty_state_placeholder
-    type: illustration
-    description: 空壳场景占位提示插画(可选) 320x180
-    status: placeholder
-    path: docs/Reqs/b63dfa/982770/assets/placeholder/empty_state_placeholder.png
-  - id: ui_hover
-    type: audio
-    description: 按钮 hover 音效(预留, 本工单不接入)
-    status: manual_required
-    note: audio 类资产需人工提供或接入对应素材源
-  - id: ui_click
-    type: audio
-    description: 按钮点击音效(预留, 本工单不接入)
-    status: manual_required
-    note: audio 类资产需人工提供或接入对应素材源

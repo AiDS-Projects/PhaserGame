@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COLORS, DESIGN_WIDTH, DESIGN_HEIGHT } from '../constants';
+import { BootScene } from '../scenes/BootScene';
 import { GameScene } from '../scenes/GameScene';
 
 // Single source of truth for the Phaser.Game bootstrap config.
@@ -21,5 +22,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [GameScene],
+  scene: [BootScene, GameScene],
 };

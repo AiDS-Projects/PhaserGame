@@ -27,3 +27,16 @@ export const COLORS = {
   platformFill: '#4F46E5',
   platformSurface: '#22D3EE',
 } as const;
+
+// Physics tuning for player movement & gravity (Arcade Physics).
+export const PHYSICS = {
+  gravityY: 1200,
+} as const;
+
+// Player movement parameters, shared by Player.ts and the level scene.
+export const PLAYER = {
+  moveSpeed: 260,
+  jumpVelocity: -480,
+  maxVelocityX: 800,
+  maxVelocityY: 1600,
+} as const;

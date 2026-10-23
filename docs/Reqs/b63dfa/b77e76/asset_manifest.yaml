@@ -1,31 +1,4 @@
 # asset_manifest.yaml — 实现玩家移动与重力物理
-# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: asset_001
-    type: photo
-    description: image: player-sprite（玩家矩形占位，纯色，尺寸建议 32x32 或 48x48 px，可复用为后续二段跳/冲刺主角）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_002
-    type: photo
-    description: image: ground-platform（地面矩形占位，纯色，宽度覆盖场景底部）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_003
-    type: photo
-    description: image: platform-static（静态平台矩形占位，纯色，≥3 块，尺寸错落如 128x16 / 192x16 px）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_004
-    type: icon
-    description: icon: debug-velocity（调试面板速度值图标，16px，outline 风格，占位可选）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_005
-    type: icon
-    description: icon: debug-onground（调试面板落地状态图标，16px，outline 风格，占位可选）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_006
-    type: icon
-    description: icon: debug-facing（调试面板朝向图标，16px，outline 风格，占位可选）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_007
-    type: icon
-    description: 说明：本工单为物理与移动原型，无外部图片/音效/动画资产需求，全部使用 Phaser Rectangle 纯色占位，正式美术资源由后续工单替换
-    status: pending  # 待美术Agent确认来源和规格

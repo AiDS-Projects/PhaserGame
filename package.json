@@ -1,3 +1,23 @@
-`package.json` 当前内容与你提供的「原文件完整内容」完全一致，而「需要的改动」部分是空的，因此没有可执行的增量改动。
+The file is corrupted — it contains placeholder text instead of a real `package.json`. The git history and lock file show the correct scaffold. I'll restore it.已修复。原 `package.json` 实际内容是被误写入的占位文字（无任何功能），并非有效 JSON。根据任务背景「初始化 Vite + Phaser 3 + TypeScript 脚手架」、`package-lock.json` 的依赖解析，以及 `build/integrity-gate.mjs` 对 `dev`/`build`/`preview`/`typecheck` 四个脚本和 `phaser`/`typescript`/`vite` 三个依赖的校验要求，恢复为正确的脚手架配置。
 
-请补充具体需要改的内容（例如：新增脚本、调整依赖版本、添加 `engines`/`description` 字段等），我再按要求修改并输出完整文件。
+修改后的完整文件内容如下（未用 markdown 代码块包裹）：
+
+{
+  "name": "phaser-game",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.8"
+  }
+}

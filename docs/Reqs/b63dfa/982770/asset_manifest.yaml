@@ -1,4 +1,19 @@
 # asset_manifest.yaml — 初始化 Vite + Phaser 3 + TypeScript 脚手架
-# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
-# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
+# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
 assets:
+  - id: asset_001
+    type: icon
+    description: 本工单(脚手架)暂无玩法美术资产, 仅需:
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_002
+    type: icon
+    description: icon: loading-spinner(启动加载指示, 24px, outline 风格)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_003
+    type: icon
+    description: icon: refresh(加载失败重试按钮, 24px, outline 风格)
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_004
+    type: icon
+    description: 后续玩法工单预留: HUD 图标(跳跃/冲刺能量条等)待补充
+    status: pending  # 待美术Agent确认来源和规格

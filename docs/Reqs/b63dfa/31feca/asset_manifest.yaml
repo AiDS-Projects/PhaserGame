@@ -1,0 +1,11 @@
+# asset_manifest.yaml — 实现二段跳与受控状态管理
+# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+assets:
+  - id: asset_001
+    type: icon
+    description: icon: 待补充
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_002
+    type: illustration
+    description: illustration: 空状态图（400x300）
+    status: pending  # 待美术Agent确认来源和规格

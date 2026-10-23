@@ -11,6 +11,7 @@ export const DESIGN_WIDTH = 960;
 export const DESIGN_HEIGHT = 540;
 
 // Color tokens sourced from docs/Reqs/b63dfa/982770/design_tokens.json.
+// Ground/platform tones extend the palette (docs/Reqs/b63dfa/6ea9b5/design_tokens.json).
 export const COLORS = {
   bg: '#0F172A',
   bgAlt: '#1E293B',
@@ -21,4 +22,8 @@ export const COLORS = {
   success: '#22C55E',
   warning: '#F59E0B',
   error: '#EF4444',
+  groundFill: '#1E293B',
+  groundSurface: '#22D3EE',
+  platformFill: '#4F46E5',
+  platformSurface: '#22D3EE',
 } as const;

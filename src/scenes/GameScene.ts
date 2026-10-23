@@ -1,22 +1,7 @@
-import Phaser from 'phaser';
-import { COLORS, SceneKey } from '../constants';
+「需要的改动」部分是空的，没有指定任何具体改动。请告诉我你希望在这个文件上做什么增量改动，例如：
 
-// Empty shell scene: solid background + lifecycle hooks, ready for the
-// movement / double-jump / dash tickets to build on.
-export class GameScene extends Phaser.Scene {
-  constructor() {
-    super({ key: SceneKey.Game });
-  }
+- 添加玩家精灵（双跳 / 冲刺）
+- 添加 HUD（分数 / 生命 / 按键提示）
+- 其他具体功能
 
-  create(): void {
-    // scene.start() reuses the instance, so clear listeners to avoid leaks.
-    this.input.removeAllListeners();
-
-    // Solid-color background (no texture), per the visual spec.
-    this.cameras.main.setBackgroundColor(COLORS.bg);
-
-    // TODO(platformer): future tickets extend here.
-    // - player sprite: double jump + dash
-    // - HUD: score / lives / key hints
-  }
-}
+我会在保留现有功能的基础上叠加改动。

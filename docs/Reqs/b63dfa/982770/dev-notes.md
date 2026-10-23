@@ -1,11 +1,11 @@
 # 开发笔记 — 初始化 Vite + Phaser 3 + TypeScript 脚手架
 
-> 2026-10-23 15:22 | LLM
+> 2026-10-23 15:35 | LLM
 
 ## 产出文件
-- [build/smoke-test.mjs](/app#repo?file=build/smoke-test.mjs) (4525 chars)
-- [.dockerignore](/app#repo?file=.dockerignore) (267 chars)
-- [package.json](/app#repo?file=package.json) (359 chars)
+- [build/smoke-test.mjs](/app#repo?file=build/smoke-test.mjs) (4486 chars)
+- [build/Dockerfile](/app#repo?file=build/Dockerfile) (400 chars)
+- [build/docker-compose.yml](/app#repo?file=build/docker-compose.yml) (153 chars)
 
 ## 自测: 自测 6/6 通过 ✅
 
@@ -20,10 +20,8 @@
 
 ## 代码变更 (Diff)
 
-### build/smoke-test.mjs (新建, 4525 chars)
+### build/smoke-test.mjs (新建, 4486 chars)
 ```
-+ 文件已生成于 `build/smoke-test.mjs`，完整内容如下：
-+ 
 + #!/usr/bin/env node
 + /**
 +  * build/smoke-test.mjs
@@ -42,32 +40,40 @@
 + 
 + // ---------------------------------------------------------------------------
 + // Paths & constants
++ // ---------------------------------------------------------------------------
++ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 + ... (更多)
 ```
 
-### .dockerignore (新建, 267 chars)
+### build/Dockerfile (新建, 400 chars)
 ```
-+ node_modules
-+ dist
-+ build
-+ .git
-+ .gitignore
-+ .husky
-+ .vscode
-+ .idea
-+ *.log
-+ npm-debug.log*
-+ yarn-debug.log*
-+ yarn-error.log*
-+ pnpm-debug.log*
-+ .DS_Store
-+ Thumbs.db
-+ .env
-+ .env.*
-+ !.env.example
-+ Dockerfile
-+ .dockerignore
-+ ... (更多)
++ # ---------- Stage 1: build the static bundle ----------
++ FROM node:20-alpine AS build
++ WORKDIR /app
++ COPY package.json package-lock.json ./
++ RUN npm ci
++ COPY index.html tsconfig.json vite.config.ts ./
++ COPY src ./src
++ RUN npm run build
++ 
++ # ---------- Stage 2: serve dist/ with nginx ----------
++ FROM nginx:alpine
++ COPY --from=build /app/dist /usr/share/nginx/html
++ EXPOSE 80
++ CMD ["nginx", "-g", "daemon off;"]
++ 
 ```
 
-### package.json (无变化)
+### build/docker-compose.yml (新建, 153 chars)
+```
++ version: '3.8'
++ services:
++   app:
++     build:
++       context: ..
++       dockerfile: build/Dockerfile
++     ports:
++       - "8080:80"
++     restart: unless-stopped
++ 
+```

@@ -1,5 +1,3 @@
-文件已生成于 `build/smoke-test.mjs`，完整内容如下：
-
 #!/usr/bin/env node
 /**
  * build/smoke-test.mjs

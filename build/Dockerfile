@@ -1,8 +1,14 @@
-FROM python:3.10-slim
+# ---------- Stage 1: build the static bundle ----------
+FROM node:20-alpine AS build
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ ./src/
-COPY config/ ./config/
-EXPOSE 8000
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY index.html tsconfig.json vite.config.ts ./
+COPY src ./src
+RUN npm run build
+
+# ---------- Stage 2: serve dist/ with nginx ----------
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

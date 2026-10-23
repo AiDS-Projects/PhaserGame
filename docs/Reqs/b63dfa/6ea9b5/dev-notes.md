@@ -1,175 +1,91 @@
 # 开发笔记 — 搭建关卡场景：地面与平台
 
-> 2026-10-23 21:18 | LLM
+> 2026-10-23 21:37 | LLM
 
 ## 产出文件
-- [src/level/levelLayout.ts](/app#repo?file=src/level/levelLayout.ts) (3286 chars)
+- [src/utils/color.ts](/app#repo?file=src/utils/color.ts) (1499 chars)
+- [scripts/acceptance-probe.mjs](/app#repo?file=scripts/acceptance-probe.mjs) (13723 chars)
 - [src/level/levelBuilder.ts](/app#repo?file=src/level/levelBuilder.ts) (3866 chars)
-- [src/constants.ts](/app#repo?file=src/constants.ts) (815 chars)
+- [src/level/levelLayout.ts](/app#repo?file=src/level/levelLayout.ts) (3286 chars)
 - [src/scenes/GameScene.ts](/app#repo?file=src/scenes/GameScene.ts) (1034 chars)
+- [src/config/gameConfig.ts](/app#repo?file=src/config/gameConfig.ts) (766 chars)
+- [package.json](/app#repo?file=package.json) (359 chars)
 
 ## 自测: 自测 7/7 通过 ✅
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
-| 文件产出 | ✅ | 4 个文件 |
+| 文件产出 | ✅ | 7 个文件 |
 | 入口文件 | ✅ | 存在 |
 | 代码非空 | ✅ | 通过 |
 | 语法检查 | ✅ | 通过 |
 | 文件名规范 | ✅ | 全英文 |
-| 磁盘落地 | ✅ | 4 个文件已落盘 |
+| 磁盘落地 | ✅ | 7 个文件已落盘 |
 | 页面截图 | ✅ | 1 张截图 |
 
 ## 代码变更 (Diff)
 
-### src/level/levelLayout.ts (新建, 3286 chars)
+### src/utils/color.ts (新建, 1499 chars)
 ```
-+ // Pure, typed, data-driven level definition for the "ground & platforms" ticket.
-+ // Deliberately free of any Phaser import: the layout is plain data so it can be
-+ // tuned and unit-tested independently of rendering. LevelBuilder consumes this
-+ // data and turns each rect into an Arcade static physics body.
-+ 
-+ // ---------------------------------------------------------------------------
-+ // World geometry tokens — single source of truth for level sizing.
-+ // Values mirror the "level" section of the design tokens (docs/Reqs/.../design_tokens.json).
-+ // ---------------------------------------------------------------------------
-+ 
-+ /** Total world width. Wider than the 960px viewport to allow horizontal scroll. */
-+ export const WORLD_WIDTH = 1920;
-+ 
-+ /** Total world height (matches the 540px design height). */
-+ export const WORLD_HEIGHT = 540;
-+ 
-+ /** Y of the ground's top surface. */
-+ export const GROUND_TOP_Y = 480;
-+ 
-+ /** Ground slab thickness. */
-+ ... (更多)
-```
-
-### src/level/levelBuilder.ts (新建, 3866 chars)
-```
-+ // Renders the static level (ground, floating platforms, world boundaries) into
-+ // a Phaser scene. Layout data lives in levelLayout.ts as plain, Phaser-free
-+ // data; this builder is the single place that turns each rect into a visible
-+ // game object plus an Arcade static body.
++ // Color utility helpers shared across scenes and the level renderer.
 + //
-+ // "Boundaries" are implemented as the Arcade world bounds + camera clamp: the
-+ // playable area is exactly the world rect from levelLayout.worldBounds, so the
-+ // camera never pans past the edges and bodies are kept inside it.
++ // Phaser accepts colors in different forms depending on the API: CSS strings
++ // ('#RRGGBB', 'rgba(...)') for rectangles/sprites, and numeric 0xRRGGBB
++ // integers for tints and Graphics.fillStyle. These helpers keep that
++ // conversion in one place instead of scattering it across call sites.
++ //
++ // The palette tokens themselves live in constants.ts (COLORS) and
++ // levelBuilder.ts (LEVEL_COLORS); this module is pure conversion/validation
++ // logic with no dependency on those tokens.
 + 
-+ import Phaser from 'phaser';
-+ import { LevelLayout, Platform, Rect, levelLayout } from './levelLayout';
++ /** CSS hex color in the form '#RRGGBB' (no alpha channel). */
++ export type HexColor = `#${string}`;
 + 
-+ // Level-specific fill/surface tones sourced from the "colors" section of
-+ // docs/Reqs/b63dfa/6ea9b5/design_tokens.json (ground_fill, ground_surface,
-+ // platform_fill, platform_surface). Kept local because these extend the base
-+ // COLORS palette in constants.ts and are only used by the level renderer.
-+ const LEVEL_COLORS = {
-+   groundFill: '#1E293B',
-+   groundSurface: '#22D3EE',
-+   platformFill: '#4F46E5',
++ /**
++  * Type guard for validating hex colors from external sources (API responses,
++  * localStorage, etc.). Rejects anything that is not a 6-digit hex string.
++  */
++ export function isHexColor(value: unknown): value is HexColor {
++   return typeof value === 'string' && /^#[0-9A-Fa-f]{6}$/.test(value);
 + ... (更多)
 ```
 
-### src/constants.ts (修改)
-```diff
---- a/src/constants.ts
-+++ b/src/constants.ts
-@@ -11,6 +11,7 @@
- export const DESIGN_HEIGHT = 540;
-
- 
-
- // Color tokens sourced from docs/Reqs/b63dfa/982770/design_tokens.json.
-
-+// Ground/platform tones extend the palette (docs/Reqs/b63dfa/6ea9b5/design_tokens.json).
-
- export const COLORS = {
-
-   bg: '#0F172A',
-
-   bgAlt: '#1E293B',
-
-@@ -21,4 +22,8 @@
-   success: '#22C55E',
-
-   warning: '#F59E0B',
-
-   error: '#EF4444',
-
-+  groundFill: '#1E293B',
-
-+  groundSurface: '#22D3EE',
-
-+  platformFill: '#4F46E5',
-
-+  platformSurface: '#22D3EE',
-
- } as const;
+### scripts/acceptance-probe.mjs (新建, 13723 chars)
+```
++ #!/usr/bin/env node
++ /**
++  * scripts/acceptance-probe.mjs
++  *
++  * Acceptance probe for the "ground & platforms" level ticket
++  * (docs/Reqs/b63dfa/6ea9b5/PRD.md). Deterministic, build-free checks that
++  * validate the level implementation against the PRD acceptance criteria and
++  * the shared design tokens (docs/Reqs/b63dfa/6ea9b5/design_tokens.json):
++  *
++  *   1. Ground     — a static Arcade body spanning the full world width (1920px).
++  *   2. Platforms  — >= 3 static bodies, 160–180px wide / 24px tall, with every
++  *                   pair separated by >= 60px horizontally or vertically.
++  *   3. Boundaries — physics world + camera clamped to the 1920x540 world.
++  *   4. Background — GameScene fills #0F172A via the shared COLORS.bg token.
++  *   5. Type safety — the level layout stays Phaser-free data, no `any` in
++  *                    src/, and (unless --skip-typecheck) `tsc --noEmit` passes.
++  *
++  * Sits between scripts/verify-files.mjs (file presence) and
++  * scripts/capture-acceptance.mjs (visual evidence): this script is the
++  * acceptance-criteria gate for the level ticket, complementing the structural
++ ... (更多)
 ```
 
-### src/scenes/GameScene.ts (修改)
-```diff
---- a/src/scenes/GameScene.ts
-+++ b/src/scenes/GameScene.ts
-@@ -1,11 +1,15 @@
- import Phaser from 'phaser';
+### src/level/levelBuilder.ts (无变化)
 
- import { COLORS, SceneKey } from '../constants';
+### src/level/levelLayout.ts (无变化)
 
-+import { LevelBuilder } from '../level/levelBuilder';
+### src/scenes/GameScene.ts (无变化)
 
- 
+### src/config/gameConfig.ts (无变化)
 
--// Empty shell scene: solid background + lifecycle hooks, ready for the
-
-+// Solid background + static level geometry (ground & platforms), ready for the
-
- // movement / double-jump / dash tickets to build on.
-
- export class GameScene extends Phaser.Scene {
-
-+  private readonly levelBuilder: LevelBuilder;
-
-+
-
-   constructor() {
-
-     super({ key: SceneKey.Game });
-
-+    this.levelBuilder = new LevelBuilder();
-
-   }
-
- 
-
-   create(): void {
-
-@@ -15,6 +19,10 @@
-     // Solid-color background (no texture), per the visual spec.
-
-     this.cameras.main.setBackgroundColor(COLORS.bg);
-
- 
-
-+    // Build the static level (ground + floating platforms) and apply the
-
-+    // world + camera bounds, per the "ground & platforms" ticket.
-
-+    this.levelBuilder.build(this);
-
-+
-
-     // TODO(platformer): future tickets extend here.
-
-     // - player sprite: double jump + dash
-
-     // - HUD: score / lives / key hints
-
-```
+### package.json (无变化)
 
 ## 页面预览截图
 
-![开发自测 — 搭建关卡场景：地面与平台](screenshots/dev_1792761501.png)
+![开发自测 — 搭建关卡场景：地面与平台](screenshots/dev_1792762638.png)
 

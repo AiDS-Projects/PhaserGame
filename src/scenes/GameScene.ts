@@ -31,7 +31,7 @@ export class GameScene extends Phaser.Scene {
 
     // Placeholder player texture (visual art comes in a later ticket).
     if (!this.textures.exists('player')) {
-      const g = this.make.graphics({ add: false });
+      const g = this.make.graphics({}, false);
       g.fillStyle(0xffffff, 1);
       g.fillRect(0, 0, 24, 32);
       g.generateTexture('player', 24, 32);
@@ -43,7 +43,7 @@ export class GameScene extends Phaser.Scene {
     this.player.enableCameraFollow();
 
     // Collide the player against the static level geometry (ground, platforms, bounds).
-    this.physics.add.collider(this.player, this.levelBuilder.getStaticGroup());
+    this.physics.add.collider(this.player, this.levelBuilder.staticGroup!);
   }
 
   update(): void {

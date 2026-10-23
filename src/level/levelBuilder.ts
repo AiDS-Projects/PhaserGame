@@ -95,7 +95,7 @@ export class LevelBuilder {
       rect.y + rect.height / 2,
       rect.width,
       rect.height,
-      fillColor,
+      Number.parseInt(String(fillColor).replace(/^#/, ''), 16),
     );
     this.statics?.add(image);
   }
@@ -113,7 +113,7 @@ export class LevelBuilder {
       topY + SURFACE_LINE_HEIGHT / 2,
       width,
       SURFACE_LINE_HEIGHT,
-      color,
+      Number.parseInt(String(color).replace(/^#/, ''), 16),
     );
   }
 }

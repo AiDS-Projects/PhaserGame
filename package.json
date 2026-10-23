@@ -1,4 +1,4 @@
-The file is corrupted — it contains placeholder text instead of a real `package.json`. The git history and lock file show the correct scaffold. I'll restore it.已修复。原 `package.json` 实际内容是被误写入的占位文字（无任何功能），并非有效 JSON。根据任务背景「初始化 Vite + Phaser 3 + TypeScript 脚手架」、`package-lock.json` 的依赖解析，以及 `build/integrity-gate.mjs` 对 `dev`/`build`/`preview`/`typecheck` 四个脚本和 `phaser`/`typescript`/`vite` 三个依赖的校验要求，恢复为正确的脚手架配置。
+已恢复 `package.json` 为有效的脚手架配置。
 
 修改后的完整文件内容如下（未用 markdown 代码块包裹）：
 
@@ -21,3 +21,5 @@ The file is corrupted — it contains placeholder text instead of a real `packag
     "vite": "^5.4.8"
   }
 }
+
+说明：原文件内容为被误写入的占位文字（非有效 JSON）。已依据 `package-lock.json`（lockfileVersion 3）中解析的依赖 `phaser ^3.80.1`、`typescript ^5.5.4`、`vite ^5.4.8`，以及 `build/integrity-gate.mjs` 对 `dev`/`build`/`preview`/`typecheck` 四个脚本的校验要求，恢复为标准脚手架配置。

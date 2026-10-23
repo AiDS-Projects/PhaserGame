@@ -1,19 +1,29 @@
 # asset_manifest.yaml — 初始化 Vite + Phaser 3 + TypeScript 脚手架
-# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: asset_001
+  - id: loading_spinner
     type: icon
-    description: 本工单(脚手架)暂无玩法美术资产, 仅需:
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_002
+    description: 启动加载指示 24px outline 风格
+    source_hint: iconify
+    status: pending
+  - id: refresh
     type: icon
-    description: icon: loading-spinner(启动加载指示, 24px, outline 风格)
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_003
-    type: icon
-    description: icon: refresh(加载失败重试按钮, 24px, outline 风格)
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_004
-    type: icon
-    description: 后续玩法工单预留: HUD 图标(跳跃/冲刺能量条等)待补充
-    status: pending  # 待美术Agent确认来源和规格
+    description: 加载失败重试按钮图标 24px outline 风格
+    source_hint: iconify
+    status: pending
+  - id: empty_state_placeholder
+    type: illustration
+    description: 空壳场景占位提示插画(可选) 320x180
+    source_hint: ai_generate
+    status: pending
+  - id: ui_hover
+    type: audio
+    description: 按钮 hover 音效(预留, 本工单不接入)
+    source_hint: kenney
+    status: pending
+  - id: ui_click
+    type: audio
+    description: 按钮点击音效(预留, 本工单不接入)
+    source_hint: kenney
+    status: pending

@@ -37,6 +37,19 @@ export const PHYSICS = {
 export const PLAYER = {
   moveSpeed: 260,
   jumpVelocity: -480,
+  doubleJumpVelocity: -420,
+  maxJumps: 2,
   maxVelocityX: 800,
   maxVelocityY: 1600,
+  controlledDuration: 400,
 } as const;
+
+// Player state machine for jump/fall/controlled-state management.
+export enum PlayerState {
+  Idle = 'Idle',
+  Run = 'Run',
+  Jump = 'Jump',
+  DoubleJump = 'DoubleJump',
+  Fall = 'Fall',
+  Controlled = 'Controlled',
+}

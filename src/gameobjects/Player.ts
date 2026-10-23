@@ -12,6 +12,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly moveSpeed: number;
   /** 跳跃初速度（负值表示向上，px/s） */
   private readonly jumpVelocity: number;
+  /** 最大跳跃次数（支持二段跳） */
+  private readonly maxJumps: number;
 
   private cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyA: Phaser.Input.Keyboard.Key;
@@ -19,12 +21,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private keyW: Phaser.Input.Keyboard.Key;
   private keySpace: Phaser.Input.Keyboard.Key;
 
+  /** 已使用的跳跃次数（触地时重置为 0） */
+  private jumpsUsed = 0;
+  /** 是否受玩家控制；为 false 时忽略所有输入 */
+  private isControlled = true;
+
   constructor(
     scene: Phaser.Scene,
     x: number,
     y: number,
     texture: string,
-    config: { moveSpeed?: number; jumpVelocity?: number } = {},
+    config: { moveSpeed?: number; jumpVelocity?: number; maxJumps?: number } = {},
   ) {
     super(scene, x, y, texture);
 
@@ -33,6 +40,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.moveSpeed = config.moveSpeed ?? 260;
     this.jumpVelocity = config.jumpVelocity ?? -480;
+    this.maxJumps = config.maxJumps ?? 2;
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setCollideWorldBounds(true);
@@ -53,9 +61,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     camera.setDeadzone(64, 64);
   }
 
+  /** 设置玩家是否受控（受控时才响应键盘输入）。 */
+  public setControlled(controlled: boolean): void {
+    this.isControlled = controlled;
+    if (!controlled) {
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      body.setVelocityX(0);
+    }
+  }
+
+  /** 返回玩家当前是否受控。 */
+  public isPlayerControlled(): boolean {
+    return this.isControlled;
+  }
+
   /** 每帧更新：处理左右移动与跳跃。 */
   public update(): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
+
+    // 触地时重置二段跳计数
+    if (body.blocked.down) {
+      this.jumpsUsed = 0;
+    }
+
+    // 未受控时忽略输入，并停止水平移动
+    if (!this.isControlled) {
+      body.setVelocityX(0);
+      return;
+    }
 
     const left = this.cursors.left.isDown || this.keyA.isDown;
     const right = this.cursors.right.isDown || this.keyD.isDown;
@@ -75,8 +108,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       Phaser.Input.Keyboard.JustDown(this.keyW) ||
       Phaser.Input.Keyboard.JustDown(this.keySpace);
 
-    if (wantJump && body.blocked.down) {
+    if (wantJump && this.jumpsUsed < this.maxJumps) {
       body.setVelocityY(this.jumpVelocity);
+      this.jumpsUsed++;
     }
   }
 }

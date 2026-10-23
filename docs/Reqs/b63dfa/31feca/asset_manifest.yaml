@@ -1,11 +1,24 @@
 # asset_manifest.yaml — 实现二段跳与受控状态管理
-# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: asset_001
+  - id: hud_dash_locked
     type: icon
-    description: icon: 待补充
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_002
+    description: 冲刺键位占位挂锁图标 16px outline
+    source_hint: iconify
+    status: pending
+  - id: hud_jump_dot_ready
+    type: icon
+    description: 跳跃可用圆点 12px 实心
+    source_hint: code_generated
+    status: pending
+  - id: hud_jump_dot_used
+    type: icon
+    description: 跳跃已用圆点 12px 空心
+    source_hint: code_generated
+    status: pending
+  - id: empty_state
     type: illustration
-    description: illustration: 空状态图（400x300）
-    status: pending  # 待美术Agent确认来源和规格
+    description: 空状态插画 400x300
+    source_hint: ai_generate
+    status: pending

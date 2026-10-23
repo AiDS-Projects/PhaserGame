@@ -1,0 +1,7 @@
+# asset_manifest.yaml — 搭建关卡场景：地面与平台
+# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+assets:
+  - id: asset_001
+    type: icon
+    description: 本工单无外部资源，地面/平台用 COLORS 色彩 token 绘制纯色矩形占位\n- icon: 无（无 HUD/图标需求）\n- illustration: 无（无空状态/插画需求）\n- ima
+    status: pending  # 待美术Agent确认来源和规格

@@ -1,9 +1,9 @@
 # 开发笔记 — 可玩原型验收自测
 
-> 2026-10-24 12:49 | LLM
+> 2026-10-24 12:55 | LLM
 
 ## 产出文件
-- [src/acceptance/acceptanceProbe.ts](/app#repo?file=src/acceptance/acceptanceProbe.ts) (20227 chars)
+- [src/acceptance/acceptanceProbe.ts](/app#repo?file=src/acceptance/acceptanceProbe.ts) (20011 chars)
 
 ## 自测: 自测 7/7 通过 ✅
 
@@ -23,104 +23,102 @@
 ```diff
 --- a/src/acceptance/acceptanceProbe.ts
 +++ b/src/acceptance/acceptanceProbe.ts
-@@ -479,8 +479,169 @@
+@@ -25,8 +25,8 @@
+  */
+
+ 
+
+ import { chromium, type Browser, type Page } from 'playwright';
+
++import { PNG } from 'pngjs';
+
+ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+
+-import { createRequire } from 'node:module';
+
+ import { dirname, join, resolve } from 'node:path';
+
+ import { fileURLToPath } from 'node:url';
+
+ 
+
+@@ -38,13 +38,6 @@
+   TOUCH_QUERY_PARAM,
+
+ } from '../constants';
+
+ import { getLevelSummary, type LevelSummary } from '../level/levelLayout';
+
+-
+
+-// pngjs 是 playwright 的 Node-only 传递依赖，主项目（浏览器）tsc 编译面无法解析其类型；
+
+-// 改为运行时 require 并以内联最小结构声明返回类型，规避 TS2307 且不影响像素比对逻辑。
+
+-const require = createRequire(import.meta.url);
+
+-const PNG = require('pngjs') as {
+
+-  sync: { read(buffer: Buffer): { width: number; height: number; data: Buffer } };
+
+-};
+
+ 
+
+ // ---------------------------------------------------------------------------
+
+ // 运行时钩子类型（与 index.html / main.ts 的 window.__game、BootScene 的
+
+@@ -158,13 +151,15 @@
+     return 1;
+
+   }
+
+   const total = a.width * a.height;
+
++  const da = a.data;
+
++  const db = b.data;
+
+   let changed = 0;
+
+   for (let i = 0; i < total; i++) {
+
+     const o = i * 4;
+
+-    const dr = Math.abs(a.data[o] - b.data[o]);
+
+-    const dg = Math.abs(a.data[o + 1] - b.data[o + 1]);
+
+-    const db = Math.abs(a.data[o + 2] - b.data[o + 2]);
+
+-    if (dr + dg + db > 48) {
+
++    const dr = Math.abs(da.readUInt8(o) - db.readUInt8(o));
+
++    const dg = Math.abs(da.readUInt8(o + 1) - db.readUInt8(o + 1));
+
++    const dbDiff = Math.abs(da.readUInt8(o + 2) - db.readUInt8(o + 2));
+
++    if (dr + dg + dbDiff > 48) {
+
+       changed++;
+
+     }
+
+   }
+
+@@ -479,6 +474,169 @@
          detail: `showTouch=${showTouch} domVisible=${ui.domVisible} fallbackActive=${ui.fallbackActive}`,
 
        });
 
  
 
--      await page.waitForTimeout(ACCEPTA
-
--
-
--/*
-
--
-
--/* ... [文件截断显示：原文 15060 字符，当前只显示前 15000；代码本身完整，保留未显示部分] ... */
-+      await page.waitForTimeout(ACCEPTANCE.settleDelayMs);
-
-+      screenshots.push(await this.capture(page, 'touch'));
-
-+
-
-+      const tappedJump = await tapControl(page, 'btn-jump', TOUCH_BUTTONS.jump);
-
-+      const jumped = await page
-
-+        .waitForFunction(
-
-+          () => (window as unknown as ProbeWindow).__game!.getState()!.jumpCount >= 1,
-
-+          undefined,
-
-+          { timeout: 3000 },
-
-+        )
-
-+        .then(() => true)
-
-+        .catch(() => false);
-
-+      checks.push({
-
-+        name: 'touch-jump',
-
-+        passed: tappedJump && jumped,
-
-+        detail: `tapped=${tappedJump} jumpCount=${(await this.getState(page))?.jumpCount}`,
-
-+      });
-
-+
-
-+      const tappedDash = await tapControl(page, 'btn-dash', TOUCH_BUTTONS.dash);
-
-+      const dashed = await page
-
-+        .waitForFunction(
-
-+          () => (window as unknown as ProbeWindow).__game!.getState()!.dashCooldownRemaining > 0,
-
-+          undefined,
-
-+          { timeout: 3000 },
-
-+        )
-
-+        .then(() => true)
-
-+        .catch(() => false);
-
-+      checks.push({
-
-+        name: 'touch-dash',
-
-+        passed: tappedDash && dashed,
-
-+        detail: `tapped=${tappedDash} cd=${(await this.getState(page))?.dashCooldownRemaining}ms`,
-
-+      });
-
-+    } finally {
-
-+      await ctx.close();
-
-+    }
-
-+    return screenshots;
-
-+  }
-
-+
-
-+  /** 截屏 + 与基线比对（基线缺失时按 updateBaselines 决定建立或判失败） */
-
-... (共 177 行变更)
+... (共 219 行变更)
 ```
 
 ## 页面预览截图
 
-![开发自测 — 可玩原型验收自测](screenshots/dev_1792817373.png)
+![开发自测 — 可玩原型验收自测](screenshots/dev_1792817556.png)
 

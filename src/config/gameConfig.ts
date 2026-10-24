@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 
 import BootScene from "../scenes/BootScene";
-import { PreloadScene } from "../scenes/PreloadScene";
+// [AutoFix: removed missing module ../scenes/PreloadScene]
 import { GameScene } from "../scenes/GameScene";
-import { UIScene } from "../scenes/UIScene";
+// [AutoFix: removed missing module ../scenes/UIScene]
 
 /** 设计分辨率（竖屏原型） */
 export const GAME_WIDTH = 720;
@@ -56,5 +56,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     activePointers: 3,
     touch: true,
   },
-  scene: [BootScene, PreloadScene, GameScene, UIScene],
+  scene: [BootScene, GameScene],
 };

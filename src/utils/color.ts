@@ -18,14 +18,14 @@ export function normalizeHex(hex: string): string {
   let h = hex.trim();
   const short = h.match(HEX_SHORT_RE);
   if (short) {
-    const [r, g, b] = short[1].split('');
+    const [r, g, b] = short[1]!.split('');
     h = `#${r}${r}${g}${g}${b}${b}`;
   }
   const full = h.match(HEX_RE);
   if (!full) {
     throw new Error(`Invalid hex color: ${hex}`);
   }
-  return `#${full[1].toLowerCase()}`;
+  return `#${full[1]!.toLowerCase()}`;
 }
 
 /** 十六进制 -> RGB 对象。 */

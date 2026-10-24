@@ -4,7 +4,6 @@ import {
   GAME_WIDTH,
   GROUND_TOP,
   GROUND_HEIGHT,
-  PLAYER_WIDTH,
   PLAYER_HEIGHT,
   COLORS,
 } from '../constants';
@@ -166,9 +165,8 @@ export class LevelBuilder {
 
   /** 在场景中构建关卡并返回句柄 */
   build(def: LevelDefinition): BuiltLevel {
-    const { width: sceneW, height: sceneH } = this.scene.scale;
+    const { width: sceneW } = this.scene.scale;
     const levelW = GAME_WIDTH || sceneW;
-    const levelH = Math.max(sceneH, GROUND_TOP + GROUND_HEIGHT);
 
     // 地面：全宽静态体，保证原型始终可站立（与 main.ts 的 ground 一致）
     const ground = this.scene.add.rectangle(

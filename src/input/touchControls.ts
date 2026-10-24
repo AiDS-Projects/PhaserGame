@@ -162,7 +162,7 @@ export class TouchControls {
     const label = this.scene.add
       .text(layout.x, layout.y, layout.label, {
         fontFamily: 'monospace',
-        fontWeight: '700',
+        fontStyle: 'bold',
         fontSize: `${layout.fontSize}px`,
         color: COLORS.textPrimary,
       })

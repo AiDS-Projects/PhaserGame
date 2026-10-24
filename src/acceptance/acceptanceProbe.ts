@@ -555,7 +555,7 @@ export class AcceptanceProbe {
 
   private async canvasReady(page: Page): Promise<boolean> {
     return page.evaluate(() => {
-      const canvas = document.querySelector('#game-container canvas');
+      const canvas = document.querySelector('#game-container canvas') as HTMLCanvasElement | null;
       return !!canvas && canvas.width > 0 && canvas.height > 0;
     });
   }

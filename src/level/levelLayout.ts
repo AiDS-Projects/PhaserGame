@@ -121,7 +121,7 @@ export interface LevelLayout {
 //  - goal：终点点位，校验完整通关路径。
 // ---------------------------------------------------------------------------
 
-export const LEVEL_LAYOUT: LevelLayout = Object.freeze({
+export const LEVEL_LAYOUT: LevelLayout = Object.freeze<LevelLayout>({
   name: 'prototype-acceptance',
   width: GAME_WIDTH,
   height: GAME_HEIGHT,

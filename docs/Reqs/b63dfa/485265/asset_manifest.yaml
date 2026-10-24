@@ -1,29 +1,14 @@
 # asset_manifest.yaml — 实现冲刺、无敌帧与冷却反馈
-# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
-# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
+# 由 ArtistAgent 落地更新
+# status: sourced=命中资产库 / placeholder=占位图待替换 / manual_required=需人工提供 / not_found=未命中
 assets:
   - id: dash_skill
     type: icon
-    description: 冲刺技能图标 24px outline（占位可用纯色矩形/色块，填充 cyan #22D3EE）
-    source_hint: placeholder
-    status: pending
+    description: 冲刺技能图标 24px outline（占位可用纯色矩形/色块，填充 cyan
+    status: placeholder
+    path: docs/Reqs/b63dfa/485265/assets/placeholder/dash_skill.png
   - id: dash_skill_dim
     type: icon
-    description: 冲刺技能图标灰化版 24px（冷却态，灰 #6B7280，40% 透明度）
-    source_hint: placeholder
-    status: pending
-  - id: dash_cooldown_track
-    type: image
-    description: 冷却进度条轨道背景 32x4 纯色矩形 rgba(255,255,255,0.14)
-    source_hint: placeholder
-    status: pending
-  - id: dash_cooldown_fill
-    type: image
-    description: 冷却进度条填充 32x4 纯色矩形 cyan #22D3EE（可切九宫格拉伸）
-    source_hint: placeholder
-    status: pending
-  - id: invincible_flash_overlay
-    type: image
-    description: 无敌帧闪烁覆盖层 48x48 半透明黄色 #FDE047 alpha 0.35
-    source_hint: placeholder
-    status: pending
+    description: 冲刺技能图标灰化版 24px（冷却态，灰
+    status: placeholder
+    path: docs/Reqs/b63dfa/485265/assets/placeholder/dash_skill_dim.png

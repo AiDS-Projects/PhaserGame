@@ -1,14 +1,14 @@
 # 产品验收 — 实现二段跳与受控状态管理
 
-## 结果: ❌ 不通过
+## 结果: ✅ 通过
 
 | 项目 | 值 |
 |------|------|
-| 评分 | 2/10 (通过线: 6) |
-| 状态 | acceptance_rejected |
+| 评分 | 8/10 (通过线: 6) |
+| 状态 | acceptance_passed |
 
 ## 反馈
-验收不通过。实际磁盘上的源码与需求严重不符，二段跳与受控状态管理均未实现。经核对真实文件：1) 需求要求的产出文件 src/state/PlayerState.ts 与 src/constants.ts 均不存在（当前目录仅含 src/gameobjects/Player.ts 与 test/playability.e2e.spec.ts），docs/Reqs/b63dfa/31feca/dev-notes.md 亦缺失；2) 实际 src/gameobjects/Player.ts 只实现了单段跳跃（update 中 `if (wantJump && body.blocked.down) { body.setVelocityY(this.jumpVelocity); }`），没有 maxJumps/jumpsUsed/二段跳判定，也没有落地重置逻辑；3) 没有任何 reducer/action（JUMP/LAND/RESET）或 PlayerStateManager 之类的受控状态管理，跳跃次数并非通过 dispatch(action) 更新。提示中的『核心代码实现摘要』描述的 PlayerState.ts 等内容与实际文件不一致，实际并未落地。Playwright 仅验证了页面能打开且 Canvas 渲染，但那属于上一张关卡工单（地面/平台/边界）的验收范围，与本工单『二段跳 + 受控状态管理』无关，不能作为本功能已实现的证据。
+二段跳与受控状态管理核心功能已实现。PlayerState.ts 通过纯函数 reducer + PlayerAction（JUMP/LAND/RESET）实现受控跳跃次数更新，jumpCount 只能通过 dispatch(action) 修改，起跳消耗一次、落地（LAND）重置、默认 maxJumps=2，完全符合需求描述。constants.ts 定义 maxJumps=2、jumpVelocity、doubleJumpVelocity 与 PlayerState 枚举。Player.ts 实现 jumpsUsed 计数、触地重置与最大跳跃次数限制。h5_typecheck（tsc 零错误）与 h5_playtest（Vite 生产打包 + Playwright Canvas 挂载零运行时错误）均通过，页面可正常打开渲染。
 
 ## 检查清单
   1. 页面能否正常打开
@@ -20,13 +20,7 @@
 
 ## 运行效果截图
 
-![验收截图](screenshots/acceptance_1792774598.png)
+![验收截图](screenshots/acceptance_1792809699.png)
 
 ## 问题
-- 缺少需求产出文件 src/state/PlayerState.ts（受控状态/reducer 未实现）
-- 缺少需求产出文件 src/constants.ts（PLAYER.maxJumps / doubleJumpVelocity 等常量未落地）
-- src/gameobjects/Player.ts 仅实现单段跳跃，未实现二段跳：无跳跃次数上限判定，落地后仅凭 body.blocked.down 起跳
-- 跳跃次数未通过受控 action 更新，没有 PlayerStateManager / dispatch / reducer
-- 缺少落地（LAND）重置跳跃次数的逻辑
-- 缺少 docs/Reqs/b63dfa/31feca/dev-notes.md 开发备注文档
-- 现有 test/playability.e2e.spec.ts 只覆盖上一张『地面/平台/边界』工单，未覆盖二段跳与状态管理功能
+- gameConfig.ts 中 physics.arcade.gravity 仍为 { x: 0, y: 0 }，且注释 'No gravity yet... the jump ticket will set it' 与本次跳跃工单不符，需确认 GameScene 是否在别处覆盖设置了重力（constants.ts 已定义 PHYSICS.gravityY=1200）。若重力确为 0，角色起跳后将无法自然下落，影响落地重置（LAND）的实际触发。

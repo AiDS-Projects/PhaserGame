@@ -1,0 +1,24 @@
+# asset_manifest.yaml — 实现二段跳与受控状态管理
+# 由 ArtistAgent 落地更新
+# status: sourced=命中资产库 / placeholder=占位图待替换 / manual_required=需人工提供 / not_found=未命中
+assets:
+  - id: hud_dash_locked
+    type: icon
+    description: 冲刺键位占位挂锁图标 16px outline
+    status: placeholder
+    path: docs/Reqs/b63dfa/31feca/assets/placeholder/hud_dash_locked.png
+  - id: hud_jump_dot_ready
+    type: icon
+    description: 跳跃可用圆点 12px 实心
+    status: placeholder
+    path: docs/Reqs/b63dfa/31feca/assets/placeholder/hud_jump_dot_ready.png
+  - id: hud_jump_dot_used
+    type: icon
+    description: 跳跃已用圆点 12px 空心
+    status: placeholder
+    path: docs/Reqs/b63dfa/31feca/assets/placeholder/hud_jump_dot_used.png
+  - id: empty_state
+    type: illustration
+    description: 空状态插画 400x300
+    status: placeholder
+    path: docs/Reqs/b63dfa/31feca/assets/placeholder/empty_state.png

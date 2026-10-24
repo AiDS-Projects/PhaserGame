@@ -1,0 +1,166 @@
+================================================================
+PhaserGame — Vite + Phaser 3 + TypeScript 脚手架初始化
+================================================================
+任务：搭建项目基础工程，跑通可运行的 Phaser 游戏空壳。
+
+生成文件清单：
+  package.json
+  tsconfig.json
+  vite.config.ts
+  index.html
+  src/main.ts
+
+----------------------------------------------------------------
+[1/5] package.json
+----------------------------------------------------------------
+{
+  "name": "phaser-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}
+
+----------------------------------------------------------------
+[2/5] tsconfig.json
+----------------------------------------------------------------
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+
+----------------------------------------------------------------
+[3/5] vite.config.ts
+----------------------------------------------------------------
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  base: './',
+  server: {
+    host: true,
+    port: 5173,
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+  },
+});
+
+----------------------------------------------------------------
+[4/5] index.html
+----------------------------------------------------------------
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Phaser Game</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0f172a;
+      }
+      #game-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #0f172a;
+      }
+      #game-container canvas {
+        display: block;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+
+----------------------------------------------------------------
+[5/5] src/main.ts
+----------------------------------------------------------------
+import Phaser from 'phaser';
+
+class MainScene extends Phaser.Scene {
+  constructor() {
+    super('MainScene');
+  }
+
+  create(): void {
+    this.add
+      .text(
+        this.cameras.main.centerX,
+        this.cameras.main.centerY,
+        'Phaser Game Shell',
+        {
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '32px',
+          color: '#ffffff',
+        }
+      )
+      .setOrigin(0.5);
+  }
+}
+
+const config: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  parent: 'game-container',
+  width: 1280,
+  height: 720,
+  backgroundColor: '#0f172a',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  scene: [MainScene],
+};
+
+new Phaser.Game(config);
+
+================================================================
+启动方式
+================================================================
+  npm install
+  npm run dev    # 打开 http://localhost:5173
+  npm run build  # 产出 dist/
+================================================================

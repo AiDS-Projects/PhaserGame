@@ -1,0 +1,14 @@
+# asset_manifest.yaml — 实现冲刺、无敌帧与冷却反馈
+# 由 ArtistAgent 落地更新
+# status: sourced=命中资产库 / placeholder=占位图待替换 / manual_required=需人工提供 / not_found=未命中
+assets:
+  - id: dash_skill
+    type: icon
+    description: 冲刺技能图标 24px outline（占位可用纯色矩形/色块，填充 cyan
+    status: placeholder
+    path: docs/Reqs/b63dfa/485265/assets/placeholder/dash_skill.png
+  - id: dash_skill_dim
+    type: icon
+    description: 冲刺技能图标灰化版 24px（冷却态，灰
+    status: placeholder
+    path: docs/Reqs/b63dfa/485265/assets/placeholder/dash_skill_dim.png

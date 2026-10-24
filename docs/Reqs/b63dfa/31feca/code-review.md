@@ -1,0 +1,29 @@
+# 代码审查 — 实现二段跳与受控状态管理
+
+## 评分: 4/10 🚫 需修复
+
+## 🔴 严重问题（必须修复）
+- {'id': 'CRIT-1', 'file': 'src/gameobjects/Player.ts', 'line': 62, 'severity': 'critical', 'title': '受控状态管理与 Player 物理对象完全脱节，存在两套并行且互相矛盾的状态系统', 'description': 'src/state/PlayerState.ts 声称「jumpCount 只能通过 dispatch(action) 更新，外部不可直接修改」，并实现了 PlayerStateManager（含 canJump/tryJump/land/reset 等唯一入口）。但 Player.ts 从未引用 PlayerStateManager，而是直接用私有字段 this.jumpsUsed++ / this.jumpsUsed = 0 修改跳跃计数。结果：Reducer 与 Manager 全是死代码，真正的运行时状态仍是无约束的直接赋值，「受控 action 驱动」的核心需求被架空。', 'suggestion': '让 Player 持有 PlayerStateManager 实例，跳跃逻辑统一走 manager.tryJump()/manager.land()，删除 Player 内的 jumpsUsed 直接维护；或在明确不需要 reducer 架构时删除 src/state 整个模块，避免两套真相源。'}
+- {'id': 'CRIT-2', 'file': 'src/config/gameConfig.ts', 'line': 18, 'severity': 'critical', 'title': '重力配置为 0，跳跃/落地检测逻辑无法工作', 'description': "gameConfig.ts 中 arcade.gravity 仍为 { x: 0, y: 0 }（注释还写着 'No gravity yet'），而 Player.ts 的落地判定完全依赖 body.blocked.down（需要重力把角色压在地面上才会产生 blocked.down）。重力为 0 时：起跳后角色永远不下落，body.blocked.down 永远不会为 true，jumpsUsed 无法重置，二段跳重置逻辑失效。constants.ts 里 PHYSICS.gravityY = 1200 定义了却未被引用。", 'suggestion': "将 gameConfig 的 gravity.y 改为引用 PHYSICS.gravityY（1200），并删除过时的 'No gravity yet' 注释。"}
+- {'id': 'CRIT-3', 'file': 'src/gameobjects/Player.ts', 'line': 74, 'severity': 'critical', 'title': '二段跳未使用 doubleJumpVelocity，首跳与二段跳初速度相同', 'description': 'constants.ts 明确定义了 jumpVelocity: -480 与 doubleJumpVelocity: -420（二段跳应更弱），但 Player.update() 中 wantJump 分支无条件执行 body.setVelocityY(this.jumpVelocity)，doubleJumpVelocity 常量从未被读取。二段跳的物理行为与需求不符。', 'suggestion': '根据当前 jumpsUsed 判断是首跳还是二段跳，首跳用 jumpVelocity、二段跳用 doubleJumpVelocity（例如 jumpsUsed === 1 时使用 doubleJumpVelocity）。'}
+
+## 🟡 警告（建议修复）
+- {'id': 'WARN-1', 'file': 'src/gameobjects/Player.ts', 'line': 28, 'severity': 'warning', 'title': '魔法值硬编码，未复用 constants.ts 中的配置', 'description': 'moveSpeed ?? 260、jumpVelocity ?? -480、maxJumps ?? 2、body.setMaxVelocity(800, 1600) 均为硬编码，而 constants.ts 已提供 PLAYER.moveSpeed/jumpVelocity/maxJumps/maxVelocityX/maxVelocityY。配置被分散在两处，后续调参会遗漏。', 'suggestion': '在构造器中引用 PLAYER 常量作为默认值，setMaxVelocity 使用 PLAYER.maxVelocityX / PLAYER.maxVelocityY。'}
+- {'id': 'WARN-2', 'file': 'src/level/levelBuilder.ts', 'line': 14, 'severity': 'warning', 'title': 'LEVEL_COLORS 与 constants.ts 的 COLORS 重复定义，违反单一数据源原则', 'description': "constants.ts 的 COLORS 已新增 groundFill/groundSurface/platformFill/platformSurface 四项，但 levelBuilder.ts 仍维护一份本地 LEVEL_COLORS（值完全相同）。constants.ts 头部注释明确说 'Avoid scattering magic values'，此处却继续散落重复颜色令牌。", 'suggestion': '删除 levelBuilder.ts 的 LEVEL_COLORS，改为从 COLORS 读取（COLORS.groundFill 等）。'}
+- {'id': 'WARN-3', 'file': 'src/gameobjects/Player.ts', 'line': 40, 'severity': 'warning', 'title': 'scene.input.keyboard 使用非空断言 keyboard!，存在空引用崩溃风险', 'description': 'const keyboard = scene.input.keyboard; this.cursors = keyboard!.createCursorKeys(); 在无键盘输入插件或纯触屏环境下 scene.input.keyboard 可能为 null，`!` 断言会掩盖空值并导致运行时 TypeError。', 'suggestion': '对 keyboard 做空值守卫（if (!keyboard) return;）或使用 Phaser 3.55+ 的 scene.input.keyboard?. 可选链与 try/catch，避免崩溃。'}
+- {'id': 'WARN-4', 'file': 'src/constants.ts', 'line': 52, 'severity': 'warning', 'title': 'PlayerState 枚举（Idle/Run/Jump/DoubleJump/Fall/Controlled）未被任何代码使用', 'description': '该枚举定义了状态机，但 Player.ts 用布尔 isControlled + 数字 jumpsUsed 表达状态，PlayerStateManager 用 jumpCount/isGrounded 表达状态，三者互不关联。PlayerState 是死代码，且与另外两套状态表达冲突。', 'suggestion': '明确单一的状态表达方式：若采用状态机，应删除布尔/计数并统一由 PlayerState 驱动；否则删除该枚举。'}
+- {'id': 'WARN-5', 'file': 'src/state/PlayerState.ts', 'line': 41, 'severity': 'warning', 'title': 'LAND 与 RESET 两个 action 分支返回值完全相同，存在重复逻辑', 'description': "case 'LAND' 与 case 'RESET' 返回完全一致的对象。两者语义不同（落地 vs 重生/重开），但当前实现无法区分，未来若 RESET 需重置 maxJumps 或额外字段会引入 bug。", 'suggestion': '合并为一个公共函数或让 RESET 额外重置 maxJumps 到构造默认值，明确语义差异。'}
+- {'id': 'WARN-6', 'file': 'src/state/PlayerState.ts', 'line': 64, 'severity': 'warning', 'title': 'PlayerStateManager 的 canJump/tryJump/land/reset/isGrounded/jumpCount 等公共 API 全部未被调用', 'description': '整个 Manager 层对外暴露了完整 API，但没有任何消费方引用（Player.ts 未集成）。这是未接线的死代码，既增加了维护负担，又制造了「状态已受控」的假象。', 'suggestion': '要么立即把 Player.ts 改为通过 Manager 派发 action，要么删除该模块直到真正需要受控状态时再引入。'}
+
+## 🟢 建议（可选优化）
+- {'id': 'SUGG-1', 'file': 'src/level/levelBuilder.ts', 'line': 54, 'severity': 'suggestion', 'title': 'Number.parseInt(String(fillColor)...) 中对已是 string 类型的参数做 String() 冗余转换', 'description': 'fillColor 参数已声明为 string，String(fillColor) 无意义。且直接十六进制解析丢失了 CSS 命名颜色或 3 位短十六进制的兼容性。', 'suggestion': '去掉 String() 包装；如需支持更多颜色格式，可用 Phaser.Display.Color.HexStringToColor 之类的统一工具。'}
+- {'id': 'SUGG-2', 'file': 'src/state/PlayerState.ts', 'line': 49, 'severity': 'suggestion', 'title': 'reducer 在跳跃用尽时返回原始 state 引用，破坏不可变约定的一致性', 'description': 'JUMP 用尽时 `return state` 返回同一引用，其它分支返回新对象。虽然 flat 快照场景下安全，但破坏「reducer 始终返回新状态」的不变量，接入引用相等比较（如 React/调试）时会造成误判。', 'suggestion': '统一约定：保持返回新对象，或明确注释说明该分支返回原引用是刻意优化。'}
+- {'id': 'SUGG-3', 'file': 'src/state/PlayerState.ts', 'line': 57, 'severity': 'suggestion', 'title': 'snapshot 仅做浅拷贝，若未来状态字段嵌套为对象/数组会泄露可变引用', 'description': '当前 PlayerStateSnapshot 是扁平结构，浅拷贝安全；但「只读快照」的语义没有通过 Object.freeze 或深拷贝保证，未来扩展嵌套字段时容易引入别名问题。', 'suggestion': '对 snapshot 返回的对象做 Object.freeze，或文档明确限定「仅支持扁平结构」。'}
+- {'id': 'SUGG-4', 'file': 'src/gameobjects/Player.ts', 'line': 66, 'severity': 'suggestion', 'title': '落地重置 jumpsUsed 依赖 body.blocked.down 的逐帧检测，存在同帧抖动风险', 'description': '重置逻辑放在 update() 顶部且每次 grounded 帧都执行，若起跳后物理尚未处理、blocked.down 仍为 true 的帧内再次输入，可能导致刚起跳即被重置计数，出现贴地连跳的边界情况。', 'suggestion': '用 body.touching.down 或配合 JustDown 的时间戳去抖，或改由 collider 回调统一维护 grounded 状态。'}
+- {'id': 'SUGG-5', 'file': 'src/constants.ts', 'line': 39, 'severity': 'suggestion', 'title': 'PHYSICS.gravityY 常量定义了却未被 gameConfig 引用', 'description': 'PHYSICS.gravityY = 1200 是死常量，与 gameConfig.ts 中硬编码的 0 形成矛盾（见 CRIT-2），常量注册与消费脱节。', 'suggestion': 'gameConfig 引用 PHYSICS.gravityY 后即可消除该死常量。'}
+
+## 审查的代码
+- src/state/PlayerState.ts
+- src/constants.ts
+- src/gameobjects/Player.ts
+- docs/Reqs/b63dfa/31feca/dev-notes.md

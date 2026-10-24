@@ -1,0 +1,50 @@
+{
+  "colors": {
+    "bg": "#0F172A",
+    "bgAlt": "#1E293B",
+    "text": "#F8FAFC",
+    "textMuted": "#94A3B8",
+    "primary": "#4F46E5",
+    "accent": "#22D3EE",
+    "success": "#22C55E",
+    "warning": "#F59E0B",
+    "error": "#EF4444",
+    "ground_fill": "#1E293B",
+    "ground_surface": "#22D3EE",
+    "platform_fill": "#4F46E5",
+    "platform_surface": "#22D3EE"
+  },
+  "typography": {
+    "base": "14px",
+    "sm": "12px",
+    "lg": "16px",
+    "heading": "20px"
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px"
+  },
+  "radius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px"
+  },
+  "shadow": {
+    "sm": "0 1px 2px rgba(0,0,0,0.3)",
+    "md": "0 4px 8px rgba(0,0,0,0.4)"
+  },
+  "level": {
+    "world_width": 1920,
+    "world_height": 540,
+    "viewport_width": 960,
+    "viewport_height": 540,
+    "ground_top_y": 480,
+    "ground_height": 60,
+    "ground_surface_line": 2,
+    "platform_height": 24,
+    "platform_min_gap": 60,
+    "min_platforms": 3
+  }
+}

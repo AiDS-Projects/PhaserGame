@@ -1,22 +1,20 @@
 # 开发笔记 — 可玩原型验收自测
 
-> 2026-10-24 12:45 | LLM
+> 2026-10-24 12:49 | LLM
 
 ## 产出文件
-- [src/acceptance/acceptanceProbe.ts](/app#repo?file=src/acceptance/acceptanceProbe.ts) (15060 chars)
-- [src/config/gameConfig.ts](/app#repo?file=src/config/gameConfig.ts) (1360 chars)
-- [src/utils/color.ts](/app#repo?file=src/utils/color.ts) (3056 chars)
+- [src/acceptance/acceptanceProbe.ts](/app#repo?file=src/acceptance/acceptanceProbe.ts) (20227 chars)
 
 ## 自测: 自测 7/7 通过 ✅
 
 | 检查项 | 结果 | 说明 |
 |--------|------|------|
-| 文件产出 | ✅ | 3 个文件 |
+| 文件产出 | ✅ | 1 个文件 |
 | 入口文件 | ✅ | 存在 |
 | 代码非空 | ✅ | 通过 |
 | 语法检查 | ✅ | 通过 |
 | 文件名规范 | ✅ | 全英文 |
-| 磁盘落地 | ✅ | 3 个文件已落盘 |
+| 磁盘落地 | ✅ | 1 个文件已落盘 |
 | 页面截图 | ✅ | 1 张截图 |
 
 ## 代码变更 (Diff)
@@ -25,92 +23,104 @@
 ```diff
 --- a/src/acceptance/acceptanceProbe.ts
 +++ b/src/acceptance/acceptanceProbe.ts
-@@ -42,7 +42,7 @@
- // pngjs 是 playwright 的 Node-only 传递依赖，主项目（浏览器）tsc 编译面无法解析其类型；
+@@ -479,8 +479,169 @@
+         detail: `showTouch=${showTouch} domVisible=${ui.domVisible} fallbackActive=${ui.fallbackActive}`,
 
- // 改为运行时 require 并以内联最小结构声明返回类型，规避 TS2307 且不影响像素比对逻辑。
-
- const require = createRequire(import.meta.url);
-
--const { PNG } = require('pngjs') as {
-
-+const PNG = require('pngjs') as {
-
-   sync: { read(buffer: Buffer): { width: number; height: number; data: Buffer } };
-
- };
+       });
 
  
 
-```
+-      await page.waitForTimeout(ACCEPTA
 
-### src/config/gameConfig.ts (修改)
-```diff
---- a/src/config/gameConfig.ts
-+++ b/src/config/gameConfig.ts
-@@ -1,9 +1,9 @@
- import Phaser from "phaser";
+-
 
- 
+-/*
 
- import BootScene from "../scenes/BootScene";
+-
 
--import { PreloadScene } from "../scenes/PreloadScene";
+-/* ... [文件截断显示：原文 15060 字符，当前只显示前 15000；代码本身完整，保留未显示部分] ... */
++      await page.waitForTimeout(ACCEPTANCE.settleDelayMs);
 
-+// [AutoFix: removed missing module ../scenes/PreloadScene]
++      screenshots.push(await this.capture(page, 'touch'));
 
- import { GameScene } from "../scenes/GameScene";
++
 
--import { UIScene } from "../scenes/UIScene";
++      const tappedJump = await tapControl(page, 'btn-jump', TOUCH_BUTTONS.jump);
 
-+// [AutoFix: removed missing module ../scenes/UIScene]
++      const jumped = await page
 
- 
++        .waitForFunction(
 
- /** 设计分辨率（竖屏原型） */
++          () => (window as unknown as ProbeWindow).__game!.getState()!.jumpCount >= 1,
 
- export const GAME_WIDTH = 720;
++          undefined,
 
-@@ -56,5 +56,5 @@
-     activePointers: 3,
++          { timeout: 3000 },
 
-     touch: true,
++        )
 
-   },
++        .then(() => true)
 
--  scene: [BootScene, PreloadScene, GameScene, UIScene],
++        .catch(() => false);
 
-+  scene: [BootScene, GameScene],
++      checks.push({
 
- };
-```
++        name: 'touch-jump',
 
-### src/utils/color.ts (新建, 3056 chars)
-```
-+ /** 颜色工具集：十六进制 / RGB / Phaser 数值色互转与常用变换。 */
-+ 
-+ export interface RGB {
-+   r: number;
-+   g: number;
-+   b: number;
-+ }
-+ 
-+ export interface RGBA extends RGB {
-+   a: number;
-+ }
-+ 
-+ const HEX_RE = /^#?([0-9a-f]{6})$/i;
-+ const HEX_SHORT_RE = /^#?([0-9a-f]{3})$/i;
-+ 
-+ /** 归一化十六进制字符串为 #rrggbb（支持 3 位缩写与省略 #）。 */
-+ export function normalizeHex(hex: string): string {
-+   let h = hex.trim();
-+   const short = h.match(HEX_SHORT_RE);
-+   if (short) {
-+ ... (更多)
++        passed: tappedJump && jumped,
+
++        detail: `tapped=${tappedJump} jumpCount=${(await this.getState(page))?.jumpCount}`,
+
++      });
+
++
+
++      const tappedDash = await tapControl(page, 'btn-dash', TOUCH_BUTTONS.dash);
+
++      const dashed = await page
+
++        .waitForFunction(
+
++          () => (window as unknown as ProbeWindow).__game!.getState()!.dashCooldownRemaining > 0,
+
++          undefined,
+
++          { timeout: 3000 },
+
++        )
+
++        .then(() => true)
+
++        .catch(() => false);
+
++      checks.push({
+
++        name: 'touch-dash',
+
++        passed: tappedDash && dashed,
+
++        detail: `tapped=${tappedDash} cd=${(await this.getState(page))?.dashCooldownRemaining}ms`,
+
++      });
+
++    } finally {
+
++      await ctx.close();
+
++    }
+
++    return screenshots;
+
++  }
+
++
+
++  /** 截屏 + 与基线比对（基线缺失时按 updateBaselines 决定建立或判失败） */
+
+... (共 177 行变更)
 ```
 
 ## 页面预览截图
 
-![开发自测 — 可玩原型验收自测](screenshots/dev_1792817098.png)
+![开发自测 — 可玩原型验收自测](screenshots/dev_1792817373.png)
 

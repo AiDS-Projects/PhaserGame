@@ -44,6 +44,17 @@ export const PLAYER = {
   controlledDuration: 400,
 } as const;
 
+// Dash, invincibility frames, and cooldown feedback tuning.
+// Shared by Player.ts, the level scene, and the dash cooldown UI.
+export const DASH = {
+  // Total time between dashes (cooldown feedback), in milliseconds.
+  cooldownMs: 800,
+  // How long a single dash lasts, in milliseconds.
+  durationMs: 150,
+  // How long the player stays invincible after dashing, in milliseconds.
+  invincibleMs: 250,
+} as const;
+
 // Player state machine for jump/fall/controlled-state management.
 export enum PlayerState {
   Idle = 'Idle',

@@ -17,7 +17,8 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
-      // No gravity yet: this ticket spawns no character; the jump ticket will set it.
+      // The player character now dashes with i-frames and cooldown feedback.
+      // Gravity stays at 0 for now: the jump ticket will set it.
       gravity: { x: 0, y: 0 },
       debug: false,
     },

@@ -1,0 +1,27 @@
+# asset_manifest.yaml — 实现冲刺、无敌帧与冷却反馈
+# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+assets:
+  - id: asset_001
+    type: icon
+    description: icon: dash-skill（冲刺技能图标，64px，实心/outline 风格，当前用纯色矩形占位）
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_002
+    type: icon
+    description: icon: shift-key-hint（Shift 快捷键角标，24px，outline 风格，提示触发按键）
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_003
+    type: photo
+    description: image: dash-cooldown-progress-bg（冷却进度条背景，64x64 或径向环形，纯色占位）
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_004
+    type: photo
+    description: image: dash-cooldown-progress-fill（冷却进度条填充层，64x64，纯色占位，随进度裁切/填充）
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_005
+    type: icon
+    description: icon: dash-ready-glow（可用态高亮描边/光晕，64px，outline 风格，可选）
+    status: pending  # 待美术Agent确认来源和规格
+  - id: asset_006
+    type: icon
+    description: icon: dash-cooldown-lock（冷却态锁定角标，24px，outline 风格，可选，强调不可用）
+    status: pending  # 待美术Agent确认来源和规格

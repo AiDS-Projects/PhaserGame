@@ -1,7 +1,19 @@
 # asset_manifest.yaml — 可玩原型验收自测
-# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: asset_001
+  - id: hud_jump
     type: icon
-    description: icon: jump（跳跃按钮图标, 48px, outline 风格, 上箭头）\n- icon: dash（冲刺按钮图标, 48px, outline 风格, 右向双箭头/闪电）\n- icon:
-    status: pending  # 待美术Agent确认来源和规格
+    description: HUD 跳跃状态图标 24px outline
+    source_hint: iconify
+    status: pending
+  - id: hud_dash
+    type: icon
+    description: HUD 冲刺状态图标 24px outline
+    source_hint: iconify
+    status: pending
+  - id: hud_ground
+    type: icon
+    description: HUD 着地状态图标 24px outline
+    source_hint: iconify
+    status: pending

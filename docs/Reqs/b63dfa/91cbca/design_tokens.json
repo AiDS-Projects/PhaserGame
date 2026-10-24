@@ -1,0 +1,54 @@
+{
+  "colors": {
+    "primary": "#4F46E5",
+    "primary_strong": "#3730A3",
+    "accent": "#F59E0B",
+    "success": "#10B981",
+    "danger": "#EF4444",
+    "bg": "#0F172A",
+    "bg_secondary": "#1E293B",
+    "surface": "#1E293B",
+    "surface_glass": "#1E293BE6",
+    "border": "#334155",
+    "text": "#F8FAFC",
+    "text_muted": "#94A3B8",
+    "player": "#38BDF8",
+    "player_invincible": "#FDE047",
+    "platform": "#64748B",
+    "platform_top": "#94A3B8",
+    "ground": "#475569"
+  },
+  "typography": {
+    "base": "14px",
+    "sm": "12px",
+    "xs": "10px",
+    "lg": "16px",
+    "heading": "20px",
+    "mono": "12px",
+    "font_family": "'JetBrains Mono','SF Mono',Consolas,monospace",
+    "weight_normal": "400",
+    "weight_medium": "500",
+    "weight_bold": "700",
+    "line_height": "1.5"
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px"
+  },
+  "radius": {
+    "none": "0px",
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "pill": "999px"
+  },
+  "shadow": {
+    "sm": "0 1px 2px rgba(0,0,0,0.4)",
+    "md": "0 4px 12px rgba(0,0,0,0.45)",
+    "lg": "0 8px 24px rgba(0,0,0,0.55)",
+    "glow_primary": "0 0 0 1px #4F46E5,0 0 12px rgba(79,70,229,0.6)"
+  }
+}

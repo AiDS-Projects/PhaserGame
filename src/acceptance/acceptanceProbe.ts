@@ -25,6 +25,7 @@
  */
 
 import { chromium, type Browser, type Page } from 'playwright';
+// @ts-ignore
 import { PNG } from 'pngjs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';

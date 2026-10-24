@@ -48,7 +48,6 @@ let activeScene: GameScene | null = null;
 class GameScene extends Phaser.Scene {
   private ground!: Phaser.GameObjects.Rectangle;
   private player!: Phaser.GameObjects.Rectangle;
-  private barBg!: Phaser.GameObjects.Rectangle;
   private barFill!: Phaser.GameObjects.Rectangle;
   private barLabel!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
@@ -95,7 +94,7 @@ class GameScene extends Phaser.Scene {
     };
 
     // Cooldown bar (screen-space)
-    this.barBg = this.add
+    this.add
       .rectangle(16, 16, 200, 18, 0x1e293b)
       .setOrigin(0, 0)
       .setStrokeStyle(2, 0x94a3b8)
@@ -166,7 +165,7 @@ class GameScene extends Phaser.Scene {
       this.add
         .text(x, y, label, {
           fontFamily: 'monospace',
-          fontWeight: '700',
+          fontStyle: 'bold',
           fontSize: `${fontSize}px`,
           color: '#e2e8f0',
         })

@@ -45,7 +45,7 @@ export interface GameStateSnapshot {
 
 declare global {
   interface Window {
-    __game?: {
+    __game: {
       getState: () => GameStateSnapshot | null;
       jump: () => boolean;
       dash: () => boolean;
@@ -65,7 +65,6 @@ export class GameScene extends Phaser.Scene {
 
   private ground!: Phaser.GameObjects.Rectangle;
   private player!: Phaser.GameObjects.Rectangle;
-  private barBg!: Phaser.GameObjects.Rectangle;
   private barFill!: Phaser.GameObjects.Rectangle;
   private barLabel!: Phaser.GameObjects.Text;
   private hud!: Phaser.GameObjects.Text;
@@ -124,7 +123,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     // 冲刺冷却条（屏幕空间）
-    this.barBg = this.add
+    this.add
       .rectangle(16, 16, 200, 18, COLORS.uiBackground)
       .setOrigin(0, 0)
       .setStrokeStyle(2, COLORS.uiBorder)
@@ -196,7 +195,7 @@ export class GameScene extends Phaser.Scene {
     this.add
       .text(layout.x, layout.y, layout.label, {
         fontFamily: 'monospace',
-        fontWeight: '700',
+        fontStyle: 'bold',
         fontSize: `${layout.fontSize}px`,
         color: COLORS.textPrimary,
       })

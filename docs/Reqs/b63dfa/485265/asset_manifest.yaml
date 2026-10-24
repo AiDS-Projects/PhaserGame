@@ -1,27 +1,29 @@
 # asset_manifest.yaml — 实现冲刺、无敌帧与冷却反馈
-# 由 UX Agent 自动生成初稿，美术 Agent 会补全和确认
+# 由美术 Agent 完整生成，覆盖 UX Agent 的初稿
+# status: pending=待生产 / sourced=已从资产库获取 / generated=已AI生成
 assets:
-  - id: asset_001
+  - id: dash_skill
     type: icon
-    description: icon: dash-skill（冲刺技能图标，64px，实心/outline 风格，当前用纯色矩形占位）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_002
+    description: 冲刺技能图标 24px outline（占位可用纯色矩形/色块，填充 cyan #22D3EE）
+    source_hint: placeholder
+    status: pending
+  - id: dash_skill_dim
     type: icon
-    description: icon: shift-key-hint（Shift 快捷键角标，24px，outline 风格，提示触发按键）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_003
-    type: photo
-    description: image: dash-cooldown-progress-bg（冷却进度条背景，64x64 或径向环形，纯色占位）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_004
-    type: photo
-    description: image: dash-cooldown-progress-fill（冷却进度条填充层，64x64，纯色占位，随进度裁切/填充）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_005
-    type: icon
-    description: icon: dash-ready-glow（可用态高亮描边/光晕，64px，outline 风格，可选）
-    status: pending  # 待美术Agent确认来源和规格
-  - id: asset_006
-    type: icon
-    description: icon: dash-cooldown-lock（冷却态锁定角标，24px，outline 风格，可选，强调不可用）
-    status: pending  # 待美术Agent确认来源和规格
+    description: 冲刺技能图标灰化版 24px（冷却态，灰 #6B7280，40% 透明度）
+    source_hint: placeholder
+    status: pending
+  - id: dash_cooldown_track
+    type: image
+    description: 冷却进度条轨道背景 32x4 纯色矩形 rgba(255,255,255,0.14)
+    source_hint: placeholder
+    status: pending
+  - id: dash_cooldown_fill
+    type: image
+    description: 冷却进度条填充 32x4 纯色矩形 cyan #22D3EE（可切九宫格拉伸）
+    source_hint: placeholder
+    status: pending
+  - id: invincible_flash_overlay
+    type: image
+    description: 无敌帧闪烁覆盖层 48x48 半透明黄色 #FDE047 alpha 0.35
+    source_hint: placeholder
+    status: pending

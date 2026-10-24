@@ -98,7 +98,7 @@ export class DashCooldownBar extends Phaser.GameObjects.Container {
     this.setReadyVisuals();
 
     // Self-driving: tick the timers on every scene update.
-    this.scene.events.on(Phaser.Scenes.Events.UPDATE, this.update, this);
+    this.scene.events.on(Phaser.Scenes.Events.UPDATE, this.onSceneTick, this);
     this.once(Phaser.GameObjects.Events.DESTROY, this.handleDestroy, this);
   }
 
@@ -135,7 +135,7 @@ export class DashCooldownBar extends Phaser.GameObjects.Container {
     return this.cooldownRemaining / this.cooldownMs;
   }
 
-  private update(_time: number, delta: number): void {
+  private onSceneTick(_time: number, delta: number): void {
     if (this.cooldownRemaining > 0) {
       this.cooldownRemaining = Math.max(0, this.cooldownRemaining - delta);
       this.setCoolingVisuals(this.getCooldownFraction());
@@ -167,6 +167,6 @@ export class DashCooldownBar extends Phaser.GameObjects.Container {
   }
 
   private handleDestroy(): void {
-    this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.update, this);
+    this.scene.events.off(Phaser.Scenes.Events.UPDATE, this.onSceneTick, this);
   }
 }

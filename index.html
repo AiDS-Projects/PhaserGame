@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Phaser Game</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0f172a;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: #0f172a;
+      }
+      #game-container canvas {
+        display: block;
+        margin: 0 auto;
+      }
+      #touch-controls {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: none;
+        justify-content: space-between;
+        align-items: flex-end;
+        padding: 18px 20px;
+        pointer-events: none;
+        z-index: 10;
+      }
+      .cluster {
+        display: flex;
+        gap: 12px;
+        pointer-events: auto;
+      }
+      .btn {
+        -webkit-appearance: none;
+        appearance: none;
+        border: 2px solid rgba(148, 163, 184, 0.6);
+        background: rgba(30, 41, 59, 0.7);
+        color: #e2e8f0;
+        font-family: monospace;
+        font-weight: 700;
+        border-radius: 14px;
+        touch-action: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .btn:active,
+      .btn.pressed {
+        background: rgba(56, 189, 248, 0.35);
+        border-color: #38bdf8;
+      }
+      .btn-move {
+        width: 72px;
+        height: 72px;
+        font-size: 26px;
+      }
+      .btn-action {
+        width: 84px;
+        height: 84px;
+        font-size: 15px;
+        letter-spacing: 1px;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <div id="touch-controls">
+      <div class="cluster">
+        <button class="btn btn-move" id="btn-left" type="button" aria-label="Move left">&#9664;</button>
+        <button class="btn btn-move" id="btn-right" type="button" aria-label="Move right">&#9654;</button>
+      </div>
+      <div class="cluster">
+        <button class="btn btn-action" id="btn-jump" type="button" aria-label="Jump">JUMP</button>
+        <button class="btn btn-action" id="btn-dash" type="button" aria-label="Dash">DASH</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        if (typeof Phaser === 'undefined') {
+          var box = document.getElementById('game-container');
+          box.innerHTML =
+            '<div style="color:#e2e8f0;font-family:monospace;padding:24px;">Phaser failed to load (check network).</div>';
+          return;
+        }
+
+        // ---- Tunables (acceptance baseline) ----
+        const GAME_W = 960;
+        const GAME_H = 540;
+        const GROUND_TOP = 480;
+        const GRAVITY = 1500;
+        const MOVE_SPEED = 360;
+        const JUMP_VELOCITY = -620;
+        const MAX_JUMPS = 2;
+        const DASH_SPEED = 1100;
+        const DASH_DURATION = 150;
+        const DASH_COOLDOWN = 800;
+        const INVINCIBLE_MS = 250;
+
+        // ---- Shared input state (keyboard + touch) ----
+        const inputState = { left: false, right: false };
+        const pendingActions = { jump: false, dash: false };
+
+        // ---- Touch controls (fallback) ----
+        const controlsEl = document.getElementById('touch-controls');
+        const showTouch =
+          'ontouchstart' in window ||
+          navigator.maxTouchPoints > 0 ||
+          /[?&]touch=1/.test(window.location.search);
+        if (showTouch) {
+          controlsEl.style.display = 'flex';
+        }
+
+        function bindButton(id, onDown, onUp) {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const down = function (e) {
+            e.preventDefault();
+            el.classList.add('pressed');
+            onDown();
+          };
+          const up = function (e) {
+            e.preventDefault();
+            el.classList.remove('pressed');
+            onUp();
+          };
+          el.addEventListener('pointerdown', down);
+          el.addEventListener('pointerup', up);
+          el.addEventListener('pointerleave', up);
+          el.addEventListener('pointercancel', up);
+        }
+
+        bindButton('btn-left', function () { inputState.left = true; }, function () { inputState.left = false; });
+        bindButton('btn-right', function () { inputState.right = true; }, function () { inputState.right = false; });
+        bindButton('btn-jump', function () { pendingActions.jump = true; }, function () {});
+        bindButton('btn-dash', function () { pendingActions.dash = true; }, function () {});
+
+        let activeScene = null;
+
+        class GameScene extends Phaser.Scene {
+          constructor() {
+            super('game');
+          }
+
+          create() {
+            activeScene = this;
+
+            // Ground
+            this.ground = this.add.rectangle(GAME_W / 2, GROUND_TOP + 40, GAME_W, 80, 0x1e293b);
+            this.physics.add.existing(this.ground, true);
+            this.add.rectangle(GAME_W / 2, GROUND_TOP + 2, GAME_W, 4, 0x334155);
+
+            // Player
+            this.player = this.add.rectangle(GAME_W / 2, GROUND_TOP - 26, 40, 52, 0x38bdf8);
+            this.physics.add.existing(this.player);
+            this.player.body.setCollideWorldBounds(true);
+            this.player.body.setGravityY(GRAVITY);
+            this.player.body.setMaxVelocity(DASH_SPEED + 100, 1400);
+
+            this.physics.add.collider(this.player, this.ground);
+
+            // Player state
+            this.st = {
+              jumpCount: 0,
+              isGrounded: true,
+              dashCooldownRemaining: 0,
+              dashRemaining: 0,
+              invincibleRemaining: 0,
+              facing: 1,
+              dashDir: 1,
+            };
+
+            // Cooldown bar (screen-space)
+            this.barBg = this.add.rectangle(16, 16, 200, 18, 0x1e293b)
+              .setOrigin(0, 0).setStrokeStyle(2, 0x94a3b8).setScrollFactor(0);
+            this.barFill = this.add.rectangle(18, 25, 196, 14, 0x22c55e)
+              .setOrigin(0, 0.5).setScrollFactor(0);
+            this.barLabel = this.add.text(224, 25, 'READY', {
+              fontFamily: 'monospace', fontSize: '13px', color: '#e2e8f0',
+            }).setOrigin(0, 0.5).setScrollFactor(0);
+
+            // HUD (assertion surface for Playwright)
+            this.hud = this.add.text(16, 46, '', {
+              fontFamily: 'monospace', fontSize: '12px', color: '#94a3b8',
+            }).setScrollFactor(0);
+
+            // Instructions
+            this.add.text(GAME_W / 2, 20, 'A/D or arrows move · SPACE jump (double) · SHIFT dash', {
+              fontFamily: 'monospace', fontSize: '13px', color: '#64748b',
+            }).setOrigin(0.5, 0).setScrollFactor(0);
+
+            // Keyboard
+            this.cursors = this.input.keyboard.createCursorKeys();
+            const kb = this.input.keyboard;
+            this.leftKeys = [this.cursors.left, kb.addKey('A')];
+            this.rightKeys = [this.cursors.right, kb.addKey('D')];
+            this.jumpKeys = [this.cursors.space, this.cursors.up, kb.addKey('W'), kb.addKey('Z')];
+            this.dashKeys = [this.cursors.shift, kb.addKey('X'), kb.addKey('K'), kb.addKey('J')];
+
+            this.renderBar();
+            this.renderHud();
+          }
+
+          anyDown(keys) {
+            for (let i = 0; i < keys.length; i++) {
+              if (keys[i].isDown) return true;
+            }
+            return false;
+          }
+
+          anyJustDown(keys) {
+            for (let i = 0; i < keys.length; i++) {
+              if (Phaser.Input.Keyboard.JustDown(keys[i])) return true;
+            }
+            return false;
+          }
+
+          tryJump() {
+            if (this.st.jumpCount >= MAX_JUMPS) return false;
+            this.st.jumpCount += 1;
+            this.st.isGrounded = false;
+            this.player.body.setVelocityY(JUMP_VELOCITY);
+            return true;
+          }
+
+          tryDash() {
+            if (this.st.dashCooldownRemaining > 0) return false;
+            const dir = (inputState.right ? 1 : 0) - (inputState.left ? 1 : 0);
+            this.st.dashDir = dir !== 0 ? dir : this.st.facing;
+            this.st.dashCooldownRemaining = DASH_COOLDOWN;
+            this.st.dashRemaining = DASH_DURATION;
+            this.st.invincibleRemaining = INVINCIBLE_MS;
+            this.player.body.setAllowGravity(false);
+            this.player.body.setVelocityY(0);
+            return true;
+          }
+
+          update(_time, delta) {
+            // Consume queued touch actions
+            if (pendingActions.jump) { pendingActions.jump = false; this.tryJump(); }
+            if (pendingActions.dash) { pendingActions.dash = false; this.tryDash(); }
+
+            // Keyboard jump / dash
+            if (this.anyJustDown(this.jumpKeys)) this.tryJump();
+            if (this.anyJustDown(this.dashKeys)) this.tryDash();
+
+            const left = inputState.left || this.anyDown(this.leftKeys);
+            const right = inputState.right || this.anyDown(this.rightKeys);
+
+            if (left && !right) this.st.facing = -1;
+            else if (right && !left) this.st.facing = 1;
+
+            // Horizontal movement
+            if (this.st.dashRemaining > 0) {
+              this.player.body.setVelocityX(this.st.dashDir * DASH_SPEED);
+            } else {
+              let vx = 0;
+              if (left) vx -= MOVE_SPEED;
+              if (right) vx += MOVE_SPEED;
+              this.player.body.setVelocityX(vx);
+            }
+
+            // Timers
+            if (this.st.dashCooldownRemaining > 0) {
+              this.st.dashCooldownRemaining = Math.max(0, this.st.dashCooldownRemaining - delta);
+            }
+            if (this.st.dashRemaining > 0) {
+              this.st.dashRemaining = Math.max(0, this.st.dashRemaining - delta);
+              if (this.st.dashRemaining === 0) {
+                this.player.body.setAllowGravity(true);
+              }
+            }
+            if (this.st.invincibleRemaining > 0) {
+              this.st.invincibleRemaining = Math.max(0, this.st.invincibleRemaining - delta);
+            }
+
+            // Grounded detection
+            if (this.player.body.blocked.down) {
+              if (!this.st.isGrounded) {
+                this.st.isGrounded = true;
+                this.st.jumpCount = 0;
+              }
+            } else {
+              this.st.isGrounded = false;
+            }
+
+            // Visuals
+            if (this.st.invincibleRemaining > 0) {
+              const blink = Math.floor(this.st.invincibleRemaining / 40) % 2 === 0;
+              this.player.setAlpha(blink ? 0.35 : 0.85);
+              this.player.setFillStyle(0xfde047);
+            } else {
+              this.player.setAlpha(1);
+              this.player.setFillStyle(0x38bdf8);
+            }
+
+            this.renderBar();
+            this.renderHud();
+          }
+
+          renderBar() {
+            if (this.st.dashCooldownRemaining > 0) {
+              const f = this.st.dashCooldownRemaining / DASH_COOLDOWN;
+              this.barFill.setFillStyle(0xf59e0b).setScale(f, 1);
+              this.barLabel.setText((this.st.dashCooldownRemaining / 1000).toFixed(1) + 's');
+            } else {
+              this.barFill.setFillStyle(0x22c55e).setScale(1, 1);
+              this.barLabel.setText('READY');
+            }
+          }
+
+          renderHud() {
+            this.hud.setText(
+              'JUMPS ' + this.st.jumpCount + '/' + MAX_JUMPS +
+              '  GROUND ' + (this.st.isGrounded ? 'Y' : 'N') +
+              '  DASH ' + (this.st.dashRemaining > 0 ? 'Y' : 'N') +
+              '  CD ' + Math.ceil(this.st.dashCooldownRemaining) +
+              '  INV ' + Math.ceil(this.st.invincibleRemaining)
+            );
+          }
+        }
+
+        const config = {
+          type: Phaser.AUTO,
+          parent: 'game-container',
+          width: GAME_W,
+          height: GAME_H,
+          backgroundColor: '#0f172a',
+          physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+          scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+          scene: [GameScene],
+        };
+
+        new Phaser.Game(config);
+
+        // Test harness for Playwright screenshot / acceptance self-test.
+        window.__game = {
+          getState() {
+            if (!activeScene) return null;
+            return {
+              jumpCount: activeScene.st.jumpCount,
+              maxJumps: MAX_JUMPS,
+              isGrounded: activeScene.st.isGrounded,
+              dashCooldownRemaining: activeScene.st.dashCooldownRemaining,
+              dashRemaining: activeScene.st.dashRemaining,
+              invincibleRemaining: activeScene.st.invincibleRemaining,
+              facing: activeScene.st.facing,
+            };
+          },
+          jump() { return activeScene ? activeScene.tryJump() : false; },
+          dash() { return activeScene ? activeScene.tryDash() : false; },
+          moveLeft(on) { inputState.left = !!on; },
+          moveRight(on) { inputState.right = !!on; },
+          showTouch,
+        };
+      })();
+    </script>
+  </body>
+</html>

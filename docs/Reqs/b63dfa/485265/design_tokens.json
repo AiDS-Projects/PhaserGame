@@ -1,0 +1,48 @@
+{
+  "colors": {
+    "dash_primary": "#22D3EE",
+    "dash_primary_bright": "#67E8F9",
+    "dash_available": "#22D3EE",
+    "dash_cooldown": "#6B7280",
+    "dash_cooldown_track": "rgba(255,255,255,0.14)",
+    "dash_cooldown_fill": "#22D3EE",
+    "invincible_flash": "#FDE047",
+    "invincible_outline": "#FFFFFF",
+    "hud_bg": "rgba(10,14,22,0.55)",
+    "hud_border": "rgba(255,255,255,0.18)",
+    "text": "#E5E7EB",
+    "text_dim": "#9CA3AF",
+    "danger": "#F87171",
+    "bg": "#0A0E16"
+  },
+  "typography": {
+    "base": "14px",
+    "sm": "12px",
+    "lg": "16px",
+    "heading": "20px"
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px"
+  },
+  "radius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "pill": "999px"
+  },
+  "shadow": {
+    "available_glow": "0 0 8px rgba(34,211,238,0.85)",
+    "available_glow_strong": "0 0 14px rgba(34,211,238,0.95)",
+    "panel": "0 2px 8px rgba(0,0,0,0.35)",
+    "none": "none"
+  },
+  "motion": {
+    "dash_active": "150ms",
+    "cooldown_total": "1500ms",
+    "ready_flash": "200ms",
+    "ease": "linear"
+  }
+}

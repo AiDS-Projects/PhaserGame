@@ -1,66 +1,155 @@
-// Central registry for scene keys, design resolution, and color tokens.
-// Avoid scattering magic values across scenes/config.
+/**
+ * 全局常量（单一事实来源）。
+ *
+ * 汇总 main.ts / state/PlayerState.ts / gameobjects/DashCooldownBar.ts 中的
+ * 魔法数字，供游戏主体、状态管理与 UI 组件共用，避免多处硬编码漂移。
+ * 时间类常量一律以毫秒（ms）为单位。
+ */
 
-export enum SceneKey {
-  Boot = 'Boot',
-  Game = 'Game',
-}
+// ---------------------------------------------------------------------------
+// 画布 / 世界
+// ---------------------------------------------------------------------------
 
-// 16:9 landscape design resolution, per UX doc + visual spec.
-export const DESIGN_WIDTH = 960;
-export const DESIGN_HEIGHT = 540;
+/** 逻辑画布宽度（px） */
+export const GAME_WIDTH = 960;
 
-// Color tokens sourced from docs/Reqs/b63dfa/982770/design_tokens.json.
-// Ground/platform tones extend the palette (docs/Reqs/b63dfa/6ea9b5/design_tokens.json).
+/** 逻辑画布高度（px） */
+export const GAME_HEIGHT = 540;
+
+/** 地面顶边 Y 坐标（px） */
+export const GROUND_TOP = 480;
+
+/** 地面厚度（px） */
+export const GROUND_HEIGHT = 80;
+
+/** 画布背景色（CSS 色值，与 index.html 保持一致） */
+export const BACKGROUND_COLOR = '#0f172a';
+
+// ---------------------------------------------------------------------------
+// 物理
+// ---------------------------------------------------------------------------
+
+/** 重力加速度（px/s²） */
+export const GRAVITY_Y = 1500;
+
+/** 竖直方向最大速度（px/s） */
+export const MAX_FALL_SPEED = 1400;
+
+// ---------------------------------------------------------------------------
+// 玩家
+// ---------------------------------------------------------------------------
+
+/** 玩家碰撞体宽度（px） */
+export const PLAYER_WIDTH = 40;
+
+/** 玩家碰撞体高度（px） */
+export const PLAYER_HEIGHT = 52;
+
+/** 水平移动速度（px/s） */
+export const MOVE_SPEED = 360;
+
+/** 起跳初速度（px/s，向上为负） */
+export const JUMP_VELOCITY = -620;
+
+/** 允许的最大跳跃次数（跳跃 + 二段跳） */
+export const MAX_JUMPS = 2;
+
+// ---------------------------------------------------------------------------
+// 冲刺 / 无敌帧
+// ---------------------------------------------------------------------------
+
+/** 冲刺水平速度（px/s） */
+export const DASH_SPEED = 1100;
+
+/** 单次冲刺持续时间（ms） */
+export const DASH_DURATION_MS = 150;
+
+/** 冲刺冷却时间（ms） */
+export const DASH_COOLDOWN_MS = 800;
+
+/** 冲刺后无敌帧时长（ms） */
+export const INVINCIBLE_MS = 250;
+
+// ---------------------------------------------------------------------------
+// 配色（0xRRGGBB / CSS）
+// ---------------------------------------------------------------------------
+
 export const COLORS = {
-  bg: '#0F172A',
-  bgAlt: '#1E293B',
-  text: '#F8FAFC',
-  textMuted: '#94A3B8',
-  primary: '#4F46E5',
-  accent: '#22D3EE',
-  success: '#22C55E',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  groundFill: '#1E293B',
-  groundSurface: '#22D3EE',
-  platformFill: '#4F46E5',
-  platformSurface: '#22D3EE',
+  background: BACKGROUND_COLOR,
+  ground: 0x1e293b,
+  groundEdge: 0x334155,
+  player: 0x38bdf8,
+  playerInvincible: 0xfde047,
+  uiBackground: 0x1e293b,
+  uiBorder: 0x94a3b8,
+  uiReady: 0x22c55e,
+  uiCooling: 0xf59e0b,
+  textPrimary: '#e2e8f0',
+  textMuted: '#94a3b8',
+  textDim: '#64748b',
 } as const;
 
-// Physics tuning for player movement & gravity (Arcade Physics).
-export const PHYSICS = {
-  gravityY: 1200,
-} as const;
+// ---------------------------------------------------------------------------
+// 触控兜底
+// ---------------------------------------------------------------------------
 
-// Player movement parameters, shared by Player.ts and the level scene.
-export const PLAYER = {
-  moveSpeed: 260,
-  jumpVelocity: -480,
-  doubleJumpVelocity: -420,
-  maxJumps: 2,
-  maxVelocityX: 800,
-  maxVelocityY: 1600,
-  controlledDuration: 400,
-} as const;
+/** 强制启用触控按钮的 URL 查询参数（如 ?touch=1） */
+export const TOUCH_QUERY_PARAM = 'touch';
 
-// Dash, invincibility frames, and cooldown feedback tuning.
-// Shared by Player.ts, the level scene, and the dash cooldown UI.
-export const DASH = {
-  // Total time between dashes (cooldown feedback), in milliseconds.
-  cooldownMs: 800,
-  // How long a single dash lasts, in milliseconds.
-  durationMs: 150,
-  // How long the player stays invincible after dashing, in milliseconds.
-  invincibleMs: 250,
-} as const;
-
-// Player state machine for jump/fall/controlled-state management.
-export enum PlayerState {
-  Idle = 'Idle',
-  Run = 'Run',
-  Jump = 'Jump',
-  DoubleJump = 'DoubleJump',
-  Fall = 'Fall',
-  Controlled = 'Controlled',
+/**
+ * 是否需要显示触控按钮：
+ * 真实触屏设备（ontouchstart / maxTouchPoints）或显式 ?touch=1 时启用。
+ */
+export function shouldShowTouchControls(): boolean {
+  return (
+    'ontouchstart' in window ||
+    navigator.maxTouchPoints > 0 ||
+    new RegExp(`[?&]${TOUCH_QUERY_PARAM}=1`).test(window.location.search)
+  );
 }
+
+/** 触控按钮布局描述（坐标均为屏幕绝对坐标，Y 自画布底部倒数） */
+export interface TouchButtonLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  fontSize: number;
+}
+
+export type TouchButtonId = 'left' | 'right' | 'dash' | 'jump';
+
+export const TOUCH_BUTTONS: Record<TouchButtonId, TouchButtonLayout> = {
+  left: { x: 52, y: GAME_HEIGHT - 52, width: 72, height: 72, label: '\u25C4', fontSize: 26 },
+  right: { x: 136, y: GAME_HEIGHT - 52, width: 72, height: 72, label: '\u25BA', fontSize: 26 },
+  dash: { x: GAME_WIDTH - 148, y: GAME_HEIGHT - 52, width: 84, height: 84, label: 'DASH', fontSize: 15 },
+  jump: { x: GAME_WIDTH - 52, y: GAME_HEIGHT - 52, width: 84, height: 84, label: 'JUMP', fontSize: 15 },
+};
+
+// ---------------------------------------------------------------------------
+// 验收自测（Playwright 截图 / 手感确认）
+// ---------------------------------------------------------------------------
+
+export const ACCEPTANCE = {
+  /** 桌面截图基准视口（与逻辑画布一致） */
+  viewport: { width: GAME_WIDTH, height: GAME_HEIGHT },
+
+  /** 移动端触控视口（用于触控兜底手感确认） */
+  touchViewport: { width: 390, height: 844 },
+
+  /** 截图输出目录 */
+  screenshotDir: 'test/screenshots',
+
+  /** 基线截图目录 */
+  baselineDir: 'test/baselines',
+
+  /** 像素差异容忍阈值（比例 0~1，超出即判定回归） */
+  maxPixelDiff: 0.02,
+
+  /** 页面加载超时（ms） */
+  loadTimeoutMs: 5000,
+
+  /** 截图前等待画面稳定时间（ms） */
+  settleDelayMs: 500,
+} as const;

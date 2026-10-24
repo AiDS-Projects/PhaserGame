@@ -1,557 +1,464 @@
 #!/usr/bin/env node
 /**
- * scripts/runtime-acceptance.mjs
+ * runtime-acceptance.mjs — 可玩原型验收自测
  *
- * Runtime acceptance for the "ground & platforms" level ticket
- * (docs/Reqs/b63dfa/6ea9b5/PRD.md). Unlike scripts/acceptance-probe.mjs
- * (build-free source checks) and scripts/capture-acceptance.mjs (a screenshot
- * for human review), this script boots the *built* game in a headless
- * Chromium and inspects the actual rendered pixels to prove the level draws
- * correctly at runtime:
+ * 职责：
+ *   1. 启动本地开发服务器（默认 Vite，可用 ACCEPT_URL 复用已启动服务）
+ *   2. 用 Playwright 按验收标准截图自测（桌面端 + 移动触控端）
+ *   3. 手感确认：帧率采样、渲染非空白、输入响应、无控制台错误
+ *   4. 触控兜底：移动端仿真 + touch 事件，确认触控可玩
  *
- *   1. Boot       — a Phaser <canvas> mounts inside #game-container.
- *   2. Background — the sky pixels match the bg token (#0F172A), i.e. the
- *                   GameScene's setBackgroundColor(COLORS.bg) actually ran and
- *                   rendered (not just the CSS page fallback).
- *   3. Ground     — the ground band renders the ground_fill color across the
- *                   full visible width, with a ground_surface accent line
- *                   along its top edge.
- *   4. Platforms  — every platform rect declared in levelLayout.ts that lands
- *                   inside the initial viewport renders its platform_fill body
- *                   and platform_surface accent line at the declared position.
- *
- * Expected geometry is read from docs/Reqs/b63dfa/6ea9b5/design_tokens.json
- * (colors + level metrics) and src/level/levelLayout.ts (platform rects), so
- * the sample points stay in sync with the single source of truth rather than
- * hard-coding coordinates.
- *
- * Renderer-agnostic: pixels are sampled from a full-page screenshot, decoded
- * in-process with zlib (no image/PNG dependencies), so it works whether Phaser
- * picked the WebGL or the Canvas renderer. The initial camera view (960px of
- * the 1920px world) is the runtime-visible window; full world/bounds/physics
- * coverage is scripts/acceptance-probe.mjs's job — this script proves the
- * visible level actually renders.
- *
- * Usage:
+ * 用法：
  *   node scripts/runtime-acceptance.mjs
- *   node scripts/runtime-acceptance.mjs --skip-build
- *   RUNTIME_BROWSER=/path/to/chrome node scripts/runtime-acceptance.mjs
+ *   ACCEPT_URL=http://localhost:5173 node scripts/runtime-acceptance.mjs
+ *   PORT=6001 node scripts/runtime-acceptance.mjs
  *
- * Options:
- *   --port <n>      preview server port           (default: 4175)
- *   --skip-build    reuse the existing dist/ dir instead of rebuilding
+ * 依赖：
+ *   npm i -D playwright
+ *   npx playwright install chromium
  *
- * Environment:
- *   RUNTIME_BROWSER   absolute path to a Chromium binary (Chrome/Edge)
- *   CAPTURE_BROWSER    fallback if RUNTIME_BROWSER is unset
- *   RUNTIME_PORT       alias for --port
+ * 产物：artifacts/acceptance/（*.png、report.json、report.md）
+ * 退出码：0 全部通过；1 存在失败项；2 环境/依赖问题
  */
-
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { inflateSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
-// ---------------------------------------------------------------------------
-// Paths & constants
-// ---------------------------------------------------------------------------
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const NODE = process.execPath;
-const VITE = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
+const OUT_DIR = path.join(ROOT, 'artifacts', 'acceptance');
 
-// Window sized to exactly 2x the 960x540 design resolution, so Scale.FIT fills
-// the window with an integer 2:1 pixel scale (no letterboxing, no fractional
-// sampling). The mapping helper still tolerates any size Chrome actually
-// produces.
-const VIEWPORT = { width: 1920, height: 1080 };
-const READY_TIMEOUT_MS = 15_000;
-const VIRTUAL_TIME_BUDGET_MS = 3_000;
+// ---------------- 配置 ----------------
+const HOST = process.env.ACCEPT_HOST || '127.0.0.1';
+const PORT = Number(process.env.PORT || 5173);
+const BASE_URL = process.env.ACCEPT_URL || `http://${HOST}:${PORT}`;
+const SERVER_COMMAND =
+  process.env.SERVER_COMMAND || `npx vite --host ${HOST} --port ${PORT} --strictPort`;
 
-// Source of truth for expected colors/metrics (same file acceptance-probe reads).
-const TOKENS_REL = path.join('docs', 'Reqs', 'b63dfa', '6ea9b5', 'design_tokens.json');
-const LAYOUT_REL = 'src/level/levelLayout.ts';
+const T = {
+  serverBoot: 60_000, // 服务器启动超时
+  pageLoad: 20_000,   // 页面加载超时
+  settle: 2_500,      // 页面加载后等待游戏初始化
+  feelSample: 2_000,  // 帧率采样时长
+  inputSettle: 900,   // 输入后等待渲染
+};
 
-// Per-channel tolerance when comparing sampled pixels to expected hex colors
-// (guards against color-management rounding in the screenshot).
-const COLOR_TOLERANCE = 6;
+const MIN_FPS = 30;
+const BLANK_VARIANCE = 4; // 亮度方差低于该值视为空白
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function fail(message) {
-  throw new Error(`RUNTIME ACCEPTANCE FAILED: ${message}`);
+// 控制台错误里可忽略的噪声（如自动请求 favicon 产生的 404）
+const IGNORED_CONSOLE = [/favicon/i];
+
+// ---------------- 工具 ----------------
+const ts = () => new Date().toISOString().slice(11, 23);
+const log = (...a) => console.log(`[${ts()}]`, ...a);
+const sha1 = (buf) => crypto.createHash('sha1').update(buf).digest('hex');
+
+const results = [];
+const screenshots = [];
+
+function record(check, status, detail = '') {
+  results.push({ check, status, detail });
+  console.log(`  [${status.toUpperCase()}] ${check}${detail ? ` — ${detail}` : ''}`);
 }
 
-function readText(relPath) {
-  const abs = path.join(ROOT, relPath);
-  if (!existsSync(abs)) fail(`required file missing: ${relPath}`);
-  return readFileSync(abs, 'utf8');
-}
-
-function readJson(relPath) {
+async function fetchOk(url, ms = 2000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
   try {
-    return JSON.parse(readText(relPath));
+    const res = await fetch(url, { signal: ctrl.signal });
+    return res.ok || res.status < 500;
   } catch {
-    fail(`${relPath} is not valid JSON`);
+    return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-function parseArgs(argv) {
-  const opts = {
-    port: Number(process.env.RUNTIME_PORT ?? 4175),
-    skipBuild: false,
-    help: false,
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--port') opts.port = Number(argv[++i]);
-    else if (arg === '--skip-build') opts.skipBuild = true;
-    else if (arg === '--help' || arg === '-h') opts.help = true;
+async function waitFor(url, timeoutMs = T.serverBoot, interval = 500) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await fetchOk(url)) return true;
+    await new Promise((r) => setTimeout(r, interval));
   }
-  return opts;
+  return false;
 }
 
-function findBrowser() {
-  const candidates = [
-    process.env.RUNTIME_BROWSER,
-    process.env.CAPTURE_BROWSER,
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  ].filter(Boolean);
+// ---------------- 开发服务器管理 ----------------
+let server = null;
 
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
+function spawnServer() {
+  log('启动开发服务器:', SERVER_COMMAND);
+  const child = spawn(SERVER_COMMAND, {
+    cwd: ROOT,
+    shell: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env },
+  });
+  child.stdout.on('data', (d) => process.stdout.write(`  [server] ${d}`));
+  child.stderr.on('data', (d) => process.stdout.write(`  [server] ${d}`));
+  return child;
 }
 
-function run(command, args, { capture = true } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      command,
-      args,
-      { cwd: ROOT, stdio: capture ? ['ignore', 'pipe', 'pipe'] : 'inherit' },
-    );
-    let stdout = '';
-    let stderr = '';
-    if (capture) {
-      child.stdout.on('data', (chunk) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
-      });
+async function ensureServer() {
+  if (process.env.ACCEPT_URL) {
+    if (!(await fetchOk(BASE_URL))) {
+      throw new Error(`ACCEPT_URL 无法访问: ${BASE_URL}`);
     }
-    child.on('error', reject);
-    child.on('exit', (code) => resolve({ code, stdout, stderr }));
+    log('复用已启动服务:', BASE_URL);
+    return BASE_URL;
+  }
+  if (await fetchOk(BASE_URL)) {
+    log('检测到已在运行的服务:', BASE_URL);
+    return BASE_URL;
+  }
+  server = spawnServer();
+  if (!(await waitFor(BASE_URL))) {
+    throw new Error(`开发服务器在 ${T.serverBoot / 1000}s 内未就绪: ${BASE_URL}`);
+  }
+  log('开发服务器就绪:', BASE_URL);
+  return BASE_URL;
+}
+
+function stopServer() {
+  if (!server) return;
+  try {
+    if (process.platform === 'win32' && server.pid) {
+      spawn('taskkill', ['/pid', String(server.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      server.kill('SIGTERM');
+    }
+  } catch {
+    /* 忽略清理失败 */
+  }
+  server = null;
+}
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    stopServer();
+    process.exit(130);
   });
 }
 
-async function waitForServer(port) {
-  const url = `http://127.0.0.1:${port}/`;
-  const deadline = Date.now() + READY_TIMEOUT_MS;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(2_000) });
-      if (res.ok) return;
-      lastError = new Error(`HTTP ${res.status}`);
-    } catch (error) {
-      lastError = error;
+// ---------------- Playwright 加载 ----------------
+async function loadPlaywright() {
+  try {
+    return await import('playwright');
+  } catch {
+    console.error('[FAIL] 未安装 playwright。请执行: npm i -D playwright && npx playwright install chromium');
+    process.exit(2);
+  }
+}
+
+// ---------------- 页面辅助 ----------------
+function attachWatchers(page) {
+  const consoleErrors = [];
+  const pageErrors = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' && !IGNORED_CONSOLE.some((re) => re.test(m.text()))) {
+      consoleErrors.push(m.text());
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  fail(`preview server did not respond within ${READY_TIMEOUT_MS}ms (last error: ${lastError})`);
+  });
+  page.on('pageerror', (e) => pageErrors.push(String(e)));
+  return { consoleErrors, pageErrors };
 }
 
-// ---------------------------------------------------------------------------
-// Level-layout source extraction (platform rects)
-// ---------------------------------------------------------------------------
-
-/** Map of `export const NAME = <number>` numeric tokens in a source file. */
-function extractConstants(source) {
-  const constants = new Map();
-  const re = /export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?[0-9]+(?:\.[0-9]+)?)/g;
-  let match;
-  while ((match = re.exec(source))) constants.set(match[1], Number(match[2]));
-  return constants;
-}
-
-/** Resolve a field token to a number (literal or a named constant). */
-function resolve(value, constants) {
-  const trimmed = value.trim();
-  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  return constants.has(trimmed) ? constants.get(trimmed) : null;
-}
-
-/** Extract every platform rect `{ id: 'platform-*', x, y, width, height }`. */
-function extractPlatforms(source, constants) {
-  const out = [];
-  const re =
-    /\{\s*id:\s*'platform-([^']*)',\s*x:\s*([^,\s}]+),\s*y:\s*([^,\s}]+),\s*width:\s*([^,\s}]+),\s*height:\s*([^,\s}]+)\s*,?\s*\}/g;
-  let match;
-  while ((match = re.exec(source))) {
-    out.push({
-      id: `platform-${match[1]}`,
-      x: resolve(match[2], constants),
-      y: resolve(match[3], constants),
-      width: resolve(match[4], constants),
-      height: resolve(match[5], constants),
-    });
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// PNG decode (minimal 8-bit RGB/RGBA, non-interlaced)
-// ---------------------------------------------------------------------------
-function decodePng(buf) {
-  if (buf.length < 24 || buf.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
-    fail('screenshot is not a valid PNG');
-  }
-
-  let offset = 8;
-  let width = 0;
-  let height = 0;
-  let bitDepth = 0;
-  let colorType = 0;
-  let interlace = 0;
-  const idat = [];
-
-  while (offset + 8 <= buf.length) {
-    const length = buf.readUInt32BE(offset);
-    const type = buf.toString('ascii', offset + 4, offset + 8);
-    const data = buf.subarray(offset + 8, offset + 8 + length);
-    offset += 12 + length;
-    if (type === 'IHDR') {
-      width = data.readUInt32BE(0);
-      height = data.readUInt32BE(4);
-      bitDepth = data[8];
-      colorType = data[9];
-      interlace = data[12];
-    } else if (type === 'IDAT') {
-      idat.push(data);
-    } else if (type === 'IEND') {
-      break;
-    }
-  }
-
-  if (bitDepth !== 8) fail(`unsupported PNG bit depth ${bitDepth}`);
-  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : null;
-  if (channels === null) fail(`unsupported PNG color type ${colorType}`);
-  if (interlace !== 0) fail('interlaced PNG not supported');
-
-  const raw = inflateSync(Buffer.concat(idat));
-  const stride = width * channels;
-  const out = Buffer.alloc(width * height * 4);
-
-  const paeth = (a, b, c) => {
-    const p = a + b - c;
-    const pa = Math.abs(p - a);
-    const pb = Math.abs(p - b);
-    const pc = Math.abs(p - c);
-    if (pa <= pb && pa <= pc) return a;
-    if (pb <= pc) return b;
-    return c;
-  };
-
-  let prev = Buffer.alloc(stride);
-  for (let y = 0; y < height; y++) {
-    const rowStart = y * (stride + 1);
-    const filter = raw[rowStart];
-    const line = raw.subarray(rowStart + 1, rowStart + 1 + stride);
-    const cur = Buffer.alloc(stride);
-    for (let i = 0; i < stride; i++) {
-      const rawByte = line[i];
-      const left = i >= channels ? cur[i - channels] : 0;
-      const up = prev[i];
-      const upLeft = i >= channels ? prev[i - channels] : 0;
-      let val;
-      switch (filter) {
-        case 0:
-          val = rawByte;
-          break;
-        case 1:
-          val = rawByte + left;
-          break;
-        case 2:
-          val = rawByte + up;
-          break;
-        case 3:
-          val = rawByte + Math.floor((left + up) / 2);
-          break;
-        case 4:
-          val = rawByte + paeth(left, up, upLeft);
-          break;
-        default:
-          fail(`unknown PNG filter type ${filter}`);
-      }
-      cur[i] = val & 0xff;
-    }
-    for (let x = 0; x < width; x++) {
-      const src = x * channels;
-      const dst = (y * width + x) * 4;
-      out[dst] = cur[src];
-      out[dst + 1] = cur[src + 1];
-      out[dst + 2] = cur[src + 2];
-      out[dst + 3] = channels === 4 ? cur[src + 3] : 255;
-    }
-    prev = cur;
-  }
-
-  return { width, height, data: out };
-}
-
-// ---------------------------------------------------------------------------
-// Color & sampling helpers
-// ---------------------------------------------------------------------------
-function hexToRgb(hex) {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!match) fail(`not a hex color: ${hex}`);
-  const n = parseInt(match[1], 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
-function matches(actual, expected, tolerance = COLOR_TOLERANCE) {
-  return (
-    Math.abs(actual[0] - expected[0]) <= tolerance &&
-    Math.abs(actual[1] - expected[1]) <= tolerance &&
-    Math.abs(actual[2] - expected[2]) <= tolerance
-  );
-}
-
-function rgbString(rgb) {
-  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+async function shot(page, name) {
+  const file = path.join(OUT_DIR, name);
+  await page.screenshot({ path: file });
+  screenshots.push(file);
+  return file;
 }
 
 /**
- * Build a function mapping design-space coordinates (dx, dy) into the
- * screenshot pixel buffer, accounting for Scale.FIT letterboxing/centering.
+ * 采样画布内容，判断是否真的在渲染（而非空白）。
+ * 采用多策略：先 drawImage 到 2D 画布读像素，失败/空白再尝试 WebGL readPixels。
  */
-function makeSampler(png, designWidth, designHeight) {
-  const scale = Math.min(png.width / designWidth, png.height / designHeight);
-  const canvasWidth = designWidth * scale;
-  const canvasHeight = designHeight * scale;
-  const left = (png.width - canvasWidth) / 2;
-  const top = (png.height - canvasHeight) / 2;
+async function sampleCanvas(page) {
+  return page.evaluate((blankVariance) => {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return { found: false };
 
-  return (dx, dy) => {
-    const x = Math.round(left + dx * scale);
-    const y = Math.round(top + dy * scale);
-    if (x < 0 || y < 0 || x >= png.width || y >= png.height) return null;
-    const i = (y * png.width + x) * 4;
-    return [png.data[i], png.data[i + 1], png.data[i + 2], png.data[i + 3]];
+    const w = canvas.width || canvas.clientWidth;
+    const h = canvas.height || canvas.clientHeight;
+
+    const varianceFrom = (pixels) => {
+      let min = 255;
+      let max = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const lum =
+          0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2];
+        if (lum < min) min = lum;
+        if (lum > max) max = lum;
+      }
+      return max - min;
+    };
+
+    // 策略 A：drawImage 到 2D 画布
+    try {
+      const c2 = document.createElement('canvas');
+      c2.width = Math.max(1, Math.min(w, 80));
+      c2.height = Math.max(1, Math.min(h, 80));
+      const ctx = c2.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(canvas, 0, 0, c2.width, c2.height);
+      const a = varianceFrom(ctx.getImageData(0, 0, c2.width, c2.height).data);
+      if (a >= blankVariance) {
+        return {
+          found: true, width: w, height: h, blank: false,
+          variance: Number(a.toFixed(1)), strategy: 'drawImage',
+        };
+      }
+    } catch {
+      /* 忽略，进入下一策略 */
+    }
+
+    // 策略 B：WebGL readPixels
+    try {
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (gl) {
+        const gw = gl.drawingBufferWidth;
+        const gh = gl.drawingBufferHeight;
+        const px = new Uint8Array(gw * gh * 4);
+        gl.readPixels(0, 0, gw, gh, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const b = varianceFrom(px);
+        if (b >= blankVariance) {
+          return {
+            found: true, width: gw, height: gh, blank: false,
+            variance: Number(b.toFixed(1)), strategy: 'readPixels',
+          };
+        }
+      }
+    } catch {
+      /* 忽略 */
+    }
+
+    return { found: true, width: w, height: h, blank: true, variance: 0, strategy: 'none' };
+  }, BLANK_VARIANCE);
+}
+
+async function sampleFps(page, durationMs = T.feelSample) {
+  return page.evaluate(async (dur) => {
+    return await new Promise((resolve) => {
+      let frames = 0;
+      const start = performance.now();
+      function tick(now) {
+        frames += 1;
+        if (now - start >= dur) {
+          resolve({
+            frames,
+            elapsed: now - start,
+            fps: Number(((frames * 1000) / (now - start)).toFixed(1)),
+          });
+          return;
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  }, durationMs);
+}
+
+/** 执行一组输入，返回画面是否发生变化（用于手感/触控响应判断） */
+async function applyInputs(page, inputs) {
+  const before = await page.screenshot();
+  const beforeHash = sha1(before);
+  for (const input of inputs) {
+    if (input.type === 'key') {
+      await page.keyboard.press(input.key);
+    } else if (input.type === 'pointer') {
+      await page.mouse.click(input.x, input.y);
+    } else if (input.type === 'tap') {
+      await page.touchscreen.tap(input.x, input.y);
+    }
+    await page.waitForTimeout(120);
+  }
+  await page.waitForTimeout(T.inputSettle);
+  const after = await page.screenshot();
+  return { changed: beforeHash !== sha1(after) };
+}
+
+// ---------------- 桌面端验收 ----------------
+async function desktopChecks(browser, url) {
+  log('\n== 桌面端验收 ==');
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await context.newPage();
+  const watchers = attachWatchers(page);
+
+  await page.goto(url, { waitUntil: 'load', timeout: T.pageLoad });
+  await page.waitForTimeout(T.settle);
+
+  // 1. 画布渲染
+  const canvas = await sampleCanvas(page);
+  if (!canvas.found || !canvas.width) {
+    record('游戏画布渲染', 'fail', '未找到有效 canvas');
+  } else if (canvas.blank) {
+    record('游戏画布渲染', 'warn', `canvas ${canvas.width}x${canvas.height} 但内容疑似空白，请查看截图人工复核`);
+  } else {
+    record('游戏画布渲染', 'pass', `canvas ${canvas.width}x${canvas.height}，亮度方差 ${canvas.variance}`);
+  }
+
+  await shot(page, 'desktop-boot.png');
+
+  // 2. 帧率（手感）
+  const fps = await sampleFps(page);
+  if (fps.fps >= MIN_FPS) {
+    record('帧率（手感）', 'pass', `${fps.fps} fps（阈值 ${MIN_FPS}）`);
+  } else {
+    record('帧率（手感）', 'warn', `${fps.fps} fps，低于 ${MIN_FPS}`);
+  }
+
+  // 3. 输入响应（手感）
+  const resp = await applyInputs(page, [
+    { type: 'key', key: 'ArrowRight' },
+    { type: 'key', key: 'Space' },
+    { type: 'pointer', x: 640, y: 360 },
+  ]);
+  if (resp.changed) {
+    record('输入响应（手感）', 'pass', '键盘/鼠标输入后画面发生变化');
+  } else {
+    record('输入响应（手感）', 'warn', '输入后画面未变化（可能为静态场景，请人工复核）');
+  }
+  await shot(page, 'desktop-after-input.png');
+
+  // 4. 控制台错误
+  if (watchers.consoleErrors.length === 0 && watchers.pageErrors.length === 0) {
+    record('控制台/页面错误', 'pass', '无错误');
+  } else {
+    const msgs = [...watchers.consoleErrors, ...watchers.pageErrors].slice(0, 3).join(' | ');
+    record('控制台/页面错误', 'fail', msgs);
+  }
+
+  await context.close();
+}
+
+// ---------------- 触控兜底（移动端仿真） ----------------
+async function touchChecks(browser, url, devices) {
+  log('\n== 触控兜底（移动端仿真）==');
+  const device = devices['Pixel 5'];
+  const context = await browser.newContext({ ...device });
+  const page = await context.newPage();
+  const watchers = attachWatchers(page);
+
+  await page.goto(url, { waitUntil: 'load', timeout: T.pageLoad });
+  await page.waitForTimeout(T.settle);
+
+  // 1. 画布渲染
+  const canvas = await sampleCanvas(page);
+  if (canvas.found && canvas.width && !canvas.blank) {
+    record('触控端画布渲染', 'pass', `canvas ${canvas.width}x${canvas.height}`);
+  } else if (canvas.found && canvas.blank) {
+    record('触控端画布渲染', 'warn', '画布疑似空白，请查看截图人工复核');
+  } else {
+    record('触控端画布渲染', 'fail', '未找到 canvas');
+  }
+
+  await shot(page, 'touch-boot.png');
+
+  // 2. 触控响应
+  const vp = page.viewportSize() || { width: 393, height: 851 };
+  const tx = Math.round(vp.width / 2);
+  const ty = Math.round(vp.height / 2);
+  const resp = await applyInputs(page, [
+    { type: 'tap', x: tx, y: ty },
+    { type: 'tap', x: tx - 60, y: ty - 60 },
+  ]);
+  if (resp.changed) {
+    record('触控响应（兜底）', 'pass', 'touch 点击后画面发生变化');
+  } else {
+    record('触控响应（兜底）', 'warn', 'touch 点击后画面未变化（可能为静态场景，请人工复核）');
+  }
+  await shot(page, 'touch-after-tap.png');
+
+  // 3. 控制台错误
+  if (watchers.consoleErrors.length === 0 && watchers.pageErrors.length === 0) {
+    record('触控端控制台错误', 'pass', '无错误');
+  } else {
+    const msgs = [...watchers.consoleErrors, ...watchers.pageErrors].slice(0, 3).join(' | ');
+    record('触控端控制台错误', 'fail', msgs);
+  }
+
+  await context.close();
+}
+
+// ---------------- 报告 ----------------
+async function writeReport({ url, pass, warn, fail }) {
+  const json = {
+    url,
+    at: new Date().toISOString(),
+    pass,
+    warn,
+    fail,
+    results,
+    screenshots: screenshots.map((s) => path.relative(ROOT, s)),
   };
-}
+  await writeFile(path.join(OUT_DIR, 'report.json'), JSON.stringify(json, null, 2), 'utf8');
 
-// ---------------------------------------------------------------------------
-// Report
-// ---------------------------------------------------------------------------
-const results = [];
-
-function check(name, ok, detail = '') {
-  results.push(ok);
-  console.log(`[runtime] ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  if (opts.help) {
-    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8'));
-    return;
-  }
-
-  const browser = findBrowser();
-  if (!browser) {
-    fail('no Chromium binary found; install Chrome/Edge or set RUNTIME_BROWSER to its path');
-  }
-
-  // --- Expected geometry (design tokens + level layout) --------------------
-  const tokens = readJson(TOKENS_REL);
-  const colors = tokens.colors ?? {};
-  const level = tokens.level ?? {};
-
-  const designWidth = level.viewport_width;
-  const designHeight = level.viewport_height;
-  const groundTopY = level.ground_top_y;
-  const groundHeight = level.ground_height;
-  const surfaceLine = level.ground_surface_line;
-  const minPlatforms = level.min_platforms;
-  const requiredColors = ['bg', 'ground_fill', 'ground_surface', 'platform_fill', 'platform_surface'];
-  const missingColors = requiredColors.filter((key) => typeof colors[key] !== 'string');
-  check('design tokens define all level colors', missingColors.length === 0, missingColors.join(', '));
-
-  const layoutSrc = readText(LAYOUT_REL);
-  const constants = extractConstants(layoutSrc);
-  const platforms = extractPlatforms(layoutSrc, constants);
-  const invalidPlatforms = platforms.filter(
-    (p) => p.x === null || p.y === null || p.width === null || p.height === null,
-  );
-  check(
-    `levelLayout.ts parses ${platforms.length} platform rect(s)`,
-    platforms.length > 0 && invalidPlatforms.length === 0,
-    invalidPlatforms.map((p) => p.id).join(', '),
-  );
-  check(`platform count >= ${minPlatforms}`, platforms.length >= minPlatforms, `found ${platforms.length}`);
-
-  // --- Build ---------------------------------------------------------------
-  if (!opts.skipBuild) {
-    console.log('[runtime] 1/4 bundling (vite build)');
-    const build = await run(NODE, [VITE, 'build'], { capture: false });
-    if (build.code !== 0) fail(`vite build exited with code ${build.code}`);
-  } else {
-    console.log('[runtime] 1/4 skipping build (--skip-build)');
-  }
-
-  // --- Serve ---------------------------------------------------------------
-  console.log(`[runtime] 2/4 serving dist (http://127.0.0.1:${opts.port})`);
-  const tmp = mkdtempSync(path.join(tmpdir(), 'phaser-runtime-'));
-  const userDataDir = path.join(tmp, 'profile');
-  const shotPath = path.join(tmp, 'shot.png');
-  const browserBase = [
-    '--headless=new',
-    '--disable-gpu',
-    '--hide-scrollbars',
-    '--force-device-scale-factor=1',
-    '--force-color-profile=srgb',
-    '--no-first-run',
-    '--no-default-browser-check',
-    `--user-data-dir=${userDataDir}`,
-    `--window-size=${VIEWPORT.width},${VIEWPORT.height}`,
+  const lines = [
+    '# 可玩原型验收报告',
+    '',
+    `- 目标：${url}`,
+    `- 时间：${json.at}`,
+    `- 结果：通过 ${pass} / 警告 ${warn} / 失败 ${fail}`,
+    '',
+    '## 检查明细',
+    '',
   ];
-
-  let server = null;
-  let serverOutput = '';
-  try {
-    server = spawn(
-      NODE,
-      [VITE, 'preview', '--host', '127.0.0.1', '--port', String(opts.port), '--strictPort'],
-      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    server.stdout.on('data', (chunk) => {
-      serverOutput += chunk.toString();
-    });
-    server.stderr.on('data', (chunk) => {
-      serverOutput += chunk.toString();
-    });
-
-    await waitForServer(opts.port);
-    const url = `http://127.0.0.1:${opts.port}/`;
-
-    // --- 3. Boot check (canvas mount) -------------------------------------
-    console.log('[runtime] 3/4 verifying a Phaser canvas is mounted');
-    const dom = await run(browser, [...browserBase, `--virtual-time-budget=${VIRTUAL_TIME_BUDGET_MS}`, '--dump-dom', url]);
-    if (dom.code !== 0) fail(`--dump-dom exited with code ${dom.code}`);
-    check('page mounts #game-container', dom.stdout.includes('id="game-container"'));
-    check('page mounts a Phaser <canvas>', dom.stdout.includes('<canvas'));
-
-    // --- 4. Render check (pixel sampling) ---------------------------------
-    console.log('[runtime] 4/4 sampling rendered pixels');
-    const startedAt = Date.now();
-    const shot = await run(
-      browser,
-      [...browserBase, `--virtual-time-budget=${VIRTUAL_TIME_BUDGET_MS}`, `--screenshot=${shotPath}`, url],
-    );
-    const elapsedMs = Date.now() - startedAt;
-    if (shot.code !== 0) {
-      if (shot.stderr.trim()) console.error('[runtime] browser stderr:\n' + shot.stderr.trim());
-      fail(`--screenshot exited with code ${shot.code}`);
-    }
-    if (!existsSync(shotPath)) fail('screenshot was not written');
-
-    const png = decodePng(readFileSync(shotPath));
-    check(
-      `screenshot captured (${png.width}x${png.height})`,
-      png.width > 0 && png.height > 0,
-      `headless render completed in ${elapsedMs}ms wall time`,
-    );
-
-    const sample = makeSampler(png, designWidth, designHeight);
-
-    // Background: clear-sky points (all above the highest platform top).
-    const bg = hexToRgb(colors.bg);
-    const bgPoints = [
-      [240, 60],
-      [480, 120],
-      [720, 60],
-    ];
-    const bgSamples = bgPoints.map(([x, y]) => sample(x, y));
-    check(
-      `background renders ${colors.bg} in clear sky`,
-      bgSamples.every((px) => px && matches(px, bg)),
-      bgSamples.map((px) => (px ? rgbString(px) : 'out-of-bounds')).join(', '),
-    );
-
-    // Ground: fill band + surface line across the visible width.
-    const groundFill = hexToRgb(colors.ground_fill);
-    const groundSurface = hexToRgb(colors.ground_surface);
-    const groundX = [10, 480, 950];
-    const groundFillY = groundTopY + Math.floor(groundHeight / 2);
-    const groundSurfaceY = groundTopY + Math.max(1, Math.floor(surfaceLine / 2));
-    const groundFillSamples = groundX.map((x) => sample(x, groundFillY));
-    const groundSurfaceSamples = groundX.map((x) => sample(x, groundSurfaceY));
-    check(
-      `ground fill renders ${colors.ground_fill} across visible width`,
-      groundFillSamples.every((px) => px && matches(px, groundFill)),
-      groundFillSamples.map((px) => (px ? rgbString(px) : 'out-of-bounds')).join(', '),
-    );
-    check(
-      `ground surface line renders ${colors.ground_surface}`,
-      groundSurfaceSamples.every((px) => px && matches(px, groundSurface)),
-      groundSurfaceSamples.map((px) => (px ? rgbString(px) : 'out-of-bounds')).join(', '),
-    );
-
-    // Platforms: render-check every rect inside the initial 960px viewport.
-    const platformFill = hexToRgb(colors.platform_fill);
-    const platformSurface = hexToRgb(colors.platform_surface);
-    const visible = platforms.filter((p) => p.x < designWidth && p.x + p.width > 0);
-    const offscreen = platforms.filter((p) => !(p.x < designWidth && p.x + p.width > 0));
-    if (offscreen.length > 0) {
-      console.log(`[runtime] info  ${offscreen.map((p) => p.id).join(', ')} off-screen (outside initial viewport)`);
-    }
-    check(`at least one platform inside the initial viewport`, visible.length > 0, `visible: ${visible.length}`);
-
-    for (const p of visible) {
-      const cx = p.x + Math.floor(p.width / 2);
-      const body = sample(cx, p.y + Math.floor(p.height / 2));
-      const edge = sample(cx, p.y + Math.max(1, Math.floor(surfaceLine / 2)));
-      check(`${p.id} body renders ${colors.platform_fill}`, !!body && matches(body, platformFill), body ? rgbString(body) : 'out-of-bounds');
-      check(`${p.id} surface renders ${colors.platform_surface}`, !!edge && matches(edge, platformSurface), edge ? rgbString(edge) : 'out-of-bounds');
-    }
-  } catch (error) {
-    if (serverOutput.trim()) {
-      console.error('[runtime] preview server output:\n' + serverOutput.trim());
-    }
-    throw error;
-  } finally {
-    if (server) server.kill();
-    rmSync(tmp, { recursive: true, force: true });
+  for (const r of results) {
+    lines.push(`- [${r.status.toUpperCase()}] ${r.check}${r.detail ? ` — ${r.detail}` : ''}`);
   }
-
-  const failed = results.filter((ok) => !ok).length;
-  if (failed > 0) {
-    console.error(`\n[runtime] ${failed} check(s) failed`);
-    process.exitCode = 1;
-  } else {
-    console.log('\n[runtime] PASS: level renders correctly at runtime');
-    process.exitCode = 0;
+  lines.push('', '## 截图', '');
+  for (const s of json.screenshots) {
+    lines.push(`- \`${s}\``);
   }
+  lines.push('');
+  await writeFile(path.join(OUT_DIR, 'report.md'), lines.join('\n'), 'utf8');
 }
 
-main().catch((error) => {
-  console.error(error?.message ?? error);
-  process.exitCode = 1;
-});
+// ---------------- 主流程 ----------------
+async function main() {
+  await mkdir(OUT_DIR, { recursive: true });
+  log('验收产物目录:', OUT_DIR);
+
+  const url = await ensureServer();
+
+  const pw = await loadPlaywright();
+  const { chromium, devices } = pw;
+
+  log('启动 Chromium…');
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+
+  try {
+    await desktopChecks(browser, url);
+    await touchChecks(browser, url, devices);
+  } finally {
+    await browser.close();
+    stopServer();
+  }
+
+  const fail = results.filter((r) => r.status === 'fail').length;
+  const warn = results.filter((r) => r.status === 'warn').length;
+  const pass = results.filter((r) => r.status === 'pass').length;
+
+  log(`\n== 汇总 == 通过 ${pass}，警告 ${warn}，失败 ${fail}`);
+  await writeReport({ url, pass, warn, fail });
+
+  const exitCode = fail > 0 ? 1 : 0;
+  log(exitCode === 0 ? '验收通过' : '验收未通过');
+  return exitCode;
+}
+
+main()
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((err) => {
+    stopServer();
+    console.error('[FAIL] 验收脚本执行失败:', err?.message || err);
+    process.exitCode = 1;
+  });

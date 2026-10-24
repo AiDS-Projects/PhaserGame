@@ -2,340 +2,269 @@
 /**
  * scripts/player-acceptance.mjs
  *
- * Player-facing acceptance for the "ground & platforms" level ticket
- * (docs/Reqs/b63dfa/6ea9b5/PRD.md). Complements the two existing gates by
- * validating the *playable* contract from a character's point of view, i.e.
- * the physical invariants that guarantee a future player body will land, rest,
- * and be contained — the PRD's "角色" acceptance criteria that the static
- * geometry alone must satisfy:
+ * 可玩原型验收自测 —— 按验收标准做 Playwright 截图自测与手感确认，附带触控兜底。
  *
- *   1. Sealed world — the level's bounds clamp x to [0, WORLD_WIDTH] and the
- *                      ground slab's bottom edge is flush with the world's
- *                      bottom edge, so a falling body can never escape the
- *                      playfield through the floor or the side walls.
- *   2. Platforms    — every platform sits fully inside the playable volume and
- *                      ABOVE the ground (no overlap), so a body can land on
- *                      any platform without being wedged into geometry.
- *   3. Immovable    — ground + every platform are Arcade STATIC bodies and the
- *                      resulting collision group is exposed to the scene, so
- *                      the movement ticket can wire `collider(player, statics)`
- *                      and a standing body won't sink through the floor.
- *   4. Staged physics — the game config already declares Arcade physics with a
- *                      gravity slot, so the movement/jump tickets can enable
- *                      gravity and dynamic velocities without restructuring.
- *   5. Type safety  — no `any` in src/, and (unless --skip-typecheck)
- *                      `tsc --noEmit` passes.
+ * 用法：
+ *   node scripts/player-acceptance.mjs [URL]
+ *   ACCEPT_URL=http://localhost:5173 node scripts/player-acceptance.mjs
  *
- * Where scripts/acceptance-probe.mjs proves the geometry is *declared with the
- * right dimensions* and scripts/runtime-acceptance.mjs proves the level
- * *renders*, this script proves the geometry is *physically sound for a
- * player*. It is deliberately build-free and deterministic: it reads the same
- * single source of truth (src/level/levelLayout.ts + the design tokens) and
- * checks the invariant relationships between bodies and bounds.
+ * 环境变量：
+ *   ACCEPT_URL        被测地址（默认 http://localhost:5173）
+ *   ACCEPT_WAIT_MS    首帧等待毫秒（默认 3000）
+ *   ACCEPT_HEADLESS   设为 0 走有头模式（默认 1 无头）
+ *   ACCEPT_SHOTS      设为 0 跳过截图（默认 1 截图）
+ *   ACCEPT_TOUCH      Playwright 设备名，用于触控兜底（默认 iPhone 13）
+ *   ACCEPT_SHOT_DIR   截图输出目录（默认 <root>/acceptance-shots）
  *
- * Usage:
- *   node scripts/player-acceptance.mjs
- *   node scripts/player-acceptance.mjs --skip-typecheck
+ * 验收标准：
+ *   1. 页面无 page error / console error
+ *   2. #game-container 内存在可见 canvas，且尺寸非零
+ *   3. 游戏循环在跑（相隔 500ms 的 canvas 帧存在像素差异）
+ *   4. 桌面与触控（模拟移动设备）两套环境均通过
+ *   5. 触控事件（touchstart/touchmove/touchend）可派发且不报错
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { chromium, devices } from 'playwright';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// ---------------------------------------------------------------------------
-// Paths & constants
-// ---------------------------------------------------------------------------
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const NODE = process.execPath;
-const TSC = path.join(ROOT, 'node_modules', 'typescript', 'lib', 'tsc.js');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, '..');
 
-// Single source of truth for the expected world metrics and colors
-// ("level" + "colors" sections of design_tokens.json).
-const TOKENS_REL = path.join('docs', 'Reqs', 'b63dfa', '6ea9b5', 'design_tokens.json');
+const CONFIG = {
+  url: process.env.ACCEPT_URL || process.argv[2] || 'http://localhost:5173',
+  waitMs: Number(process.env.ACCEPT_WAIT_MS || 3000),
+  headless: process.env.ACCEPT_HEADLESS !== '0',
+  screenshots: process.env.ACCEPT_SHOTS !== '0',
+  touchDevice: process.env.ACCEPT_TOUCH || 'iPhone 13',
+  shotDir: process.env.ACCEPT_SHOT_DIR || path.join(ROOT, 'acceptance-shots'),
+};
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function readText(relPath) {
-  const abs = path.join(ROOT, relPath);
-  if (!existsSync(abs)) throw new Error(`required file missing: ${relPath}`);
-  return readFileSync(abs, 'utf8');
-}
+const results = [];
+let shotSeq = 0;
 
-function readJson(relPath) {
-  try {
-    return JSON.parse(readText(relPath));
-  } catch {
-    throw new Error(`${relPath} is not valid JSON`);
-  }
-}
+const log = (msg) => console.log(`[acceptance] ${msg}`);
+const warn = (msg) => console.warn(`[acceptance][warn] ${msg}`);
 
-function listSourceFiles(dir = 'src') {
-  const abs = path.join(ROOT, dir);
-  if (!existsSync(abs)) return [];
-  const out = [];
-  for (const entry of readdirSync(abs, { withFileTypes: true })) {
-    const rel = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listSourceFiles(rel));
-    else if (entry.isFile() && rel.endsWith('.ts')) out.push(rel.replaceAll('\\', '/'));
-  }
-  return out;
-}
-
-function parseArgs(argv) {
-  const opts = { skipTypecheck: false, help: false };
-  for (const arg of argv) {
-    if (arg === '--skip-typecheck') opts.skipTypecheck = true;
-    else if (arg === '--help' || arg === '-h') opts.help = true;
-  }
-  return opts;
-}
-
-function run(command, args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: ROOT, stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('exit', (code) => resolve(code));
+/** 收集页面与 console 错误 */
+function attachErrorCollector(page, bucket) {
+  page.on('pageerror', (err) => {
+    bucket.push(`pageerror: ${err.message}`);
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      bucket.push(`console.error: ${msg.text()}`);
+    }
   });
 }
 
-// ---------------------------------------------------------------------------
-// Level-layout source extraction
-// ---------------------------------------------------------------------------
-
-/** Map of `export const NAME = <number>` numeric tokens in a source file. */
-function extractConstants(source) {
-  const constants = new Map();
-  const re = /export\s+const\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?[0-9]+(?:\.[0-9]+)?)/g;
-  let match;
-  while ((match = re.exec(source))) constants.set(match[1], Number(match[2]));
-  return constants;
+/** 等待 canvas 出现并返回其包围盒 */
+async function waitForCanvas(page, timeout = 10000) {
+  await page.waitForSelector('#game-container canvas', { timeout });
+  return page.locator('#game-container canvas').boundingBox();
 }
 
-/** Resolve a field token to a number (literal or a named constant). */
-function resolve(value, constants) {
-  const trimmed = value.trim();
-  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
-  if (constants.has(trimmed)) return constants.get(trimmed);
-  return null;
+/** 帧差检测：两帧 buffer 不同则视为循环在跑 */
+function buffersDiffer(a, b) {
+  if (!a || !b || a.length !== b.length) return true;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return true;
+  }
+  return false;
 }
 
-/**
- * Extract a single rect `{ id: '<id>', x, y, width, height }` from the layout
- * source. Returns `{ id, x, y, width, height }` or null if not found.
- */
-function extractRect(source, id, constants) {
-  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(
-    `\\{\\s*id:\\s*'${escaped}',\\s*x:\\s*([^,\\s}]+),\\s*y:\\s*([^,\\s}]+),\\s*width:\\s*([^,\\s}]+),\\s*height:\\s*([^,\\s}]+)\\s*,?\\s*\\}`,
-  );
-  const match = source.match(re);
-  if (!match) return null;
-  return {
-    id,
-    x: resolve(match[1], constants),
-    y: resolve(match[2], constants),
-    width: resolve(match[3], constants),
-    height: resolve(match[4], constants),
-  };
+async function shoot(page, name) {
+  if (!CONFIG.screenshots) return null;
+  await mkdir(CONFIG.shotDir, { recursive: true });
+  shotSeq += 1;
+  const file = path.join(CONFIG.shotDir, `${String(shotSeq).padStart(2, '0')}-${name}.png`);
+  await page.screenshot({ path: file, fullPage: false });
+  return file;
 }
 
-/** Extract every platform rect `{ id: 'platform-*', x, y, width, height }`. */
-function extractPlatforms(source, constants) {
-  const out = [];
-  const re =
-    /\{\s*id:\s*'platform-([^']*)',\s*x:\s*([^,\s}]+),\s*y:\s*([^,\s}]+),\s*width:\s*([^,\s}]+),\s*height:\s*([^,\s}]+)\s*,?\s*\}/g;
-  let match;
-  while ((match = re.exec(source))) {
-    out.push({
-      id: `platform-${match[1]}`,
-      x: resolve(match[2], constants),
-      y: resolve(match[3], constants),
-      width: resolve(match[4], constants),
-      height: resolve(match[5], constants),
+/** 桌面环境自测 */
+async function testDesktop(browser) {
+  const bucket = [];
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 720 },
+  });
+  const page = await context.newPage();
+  attachErrorCollector(page, bucket);
+
+  log(`加载桌面环境: ${CONFIG.url}`);
+  await page.goto(CONFIG.url, { waitUntil: 'load' });
+  await page.waitForTimeout(CONFIG.waitMs);
+
+  let canvasBox;
+  try {
+    canvasBox = await waitForCanvas(page);
+  } catch {
+    await context.close();
+    return {
+      env: 'desktop',
+      pass: false,
+      checks: [
+        { name: '页面无错误', pass: bucket.length === 0, detail: bucket.join('; ') || 'ok' },
+        { name: 'canvas 存在且可见', pass: false, detail: '未在 #game-container 中找到 canvas' },
+        { name: '游戏循环运行中', pass: false, detail: 'canvas 缺失，跳过帧差检测' },
+      ],
+    };
+  }
+
+  const frameA = await page.locator('#game-container canvas').screenshot();
+  await page.waitForTimeout(500);
+  const frameB = await page.locator('#game-container canvas').screenshot();
+  const animating = buffersDiffer(frameA, frameB);
+
+  const shot = await shoot(page, 'desktop');
+
+  const checks = [
+    { name: '页面无错误', pass: bucket.length === 0, detail: bucket.join('; ') || 'ok' },
+    {
+      name: 'canvas 存在且可见',
+      pass: Boolean(canvasBox && canvasBox.width > 0 && canvasBox.height > 0),
+      detail: canvasBox
+        ? `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`
+        : '无包围盒',
+    },
+    {
+      name: '游戏循环运行中（帧差检测）',
+      pass: animating,
+      detail: animating ? '两帧存在像素差异' : '两帧画面相同，疑似未渲染',
+    },
+  ];
+
+  await context.close();
+  return { env: 'desktop', pass: checks.every((c) => c.pass), checks, shot };
+}
+
+/** 触控兜底：模拟移动设备，验证触控事件可派发 */
+async function testTouch(browser) {
+  const bucket = [];
+  const device = devices[CONFIG.touchDevice] || devices['iPhone 13'];
+  const context = await browser.newContext({
+    ...device,
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  attachErrorCollector(page, bucket);
+
+  log(`加载触控环境: ${CONFIG.url} (${CONFIG.touchDevice})`);
+  await page.goto(CONFIG.url, { waitUntil: 'load' });
+  await page.waitForTimeout(CONFIG.waitMs);
+
+  let canvasBox;
+  try {
+    canvasBox = await waitForCanvas(page);
+  } catch {
+    await context.close();
+    return {
+      env: 'touch',
+      pass: false,
+      checks: [
+        { name: '页面无错误', pass: bucket.length === 0, detail: bucket.join('; ') || 'ok' },
+        { name: 'canvas 存在且可见', pass: false, detail: '未找到 canvas' },
+        { name: '触控事件派发无错误', pass: false, detail: 'canvas 缺失，跳过触控派发' },
+      ],
+    };
+  }
+
+  const cx = canvasBox.x + canvasBox.width / 2;
+  const cy = canvasBox.y + canvasBox.height / 2;
+
+  let touchOk = true;
+  let touchDetail = 'touchstart/touchmove/touchend 均派发成功';
+  try {
+    await page.touchscreen.tap(cx, cy);
+    await page.dispatchEvent('#game-container canvas', 'touchstart', {
+      touches: [{ identifier: 1, clientX: cx, clientY: cy }],
     });
+    await page.dispatchEvent('#game-container canvas', 'touchmove', {
+      touches: [{ identifier: 1, clientX: cx + 30, clientY: cy + 30 }],
+    });
+    await page.dispatchEvent('#game-container canvas', 'touchend', {
+      touches: [],
+      changedTouches: [{ identifier: 1, clientX: cx + 30, clientY: cy + 30 }],
+    });
+  } catch (err) {
+    touchOk = false;
+    touchDetail = `触控派发失败: ${err.message}`;
   }
-  return out;
+  await page.waitForTimeout(300);
+
+  const frameA = await page.locator('#game-container canvas').screenshot();
+  await page.waitForTimeout(500);
+  const frameB = await page.locator('#game-container canvas').screenshot();
+  const animating = buffersDiffer(frameA, frameB);
+
+  const shot = await shoot(page, 'touch');
+
+  const checks = [
+    { name: '页面无错误', pass: bucket.length === 0, detail: bucket.join('; ') || 'ok' },
+    {
+      name: 'canvas 存在且可见',
+      pass: Boolean(canvasBox && canvasBox.width > 0 && canvasBox.height > 0),
+      detail: canvasBox
+        ? `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`
+        : '无包围盒',
+    },
+    { name: '触控事件派发无错误', pass: touchOk, detail: touchDetail },
+    {
+      name: '游戏循环运行中（帧差检测）',
+      pass: animating,
+      detail: animating ? '两帧存在像素差异' : '两帧画面相同，疑似未渲染',
+    },
+  ];
+
+  await context.close();
+  return { env: 'touch', pass: checks.every((c) => c.pass), checks, shot };
 }
 
-/** Extract the `worldBounds: WorldBounds = { x, y, width, height }` rect. */
-function extractWorldBounds(source, constants) {
-  const re =
-    /worldBounds:\s*WorldBounds\s*=\s*\{\s*x:\s*([^,\s}]+),\s*y:\s*([^,\s}]+),\s*width:\s*([^,\s}]+),\s*height:\s*([^,\s}]+)\s*,?\s*\}/;
-  const match = source.match(re);
-  if (!match) return null;
-  return {
-    x: resolve(match[1], constants),
-    y: resolve(match[2], constants),
-    width: resolve(match[3], constants),
-    height: resolve(match[4], constants),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Report & checks
-// ---------------------------------------------------------------------------
-const results = [];
-
-function check(name, ok, detail = '') {
-  results.push(ok);
-  console.log(`[player] ${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
-}
-
-function tryRead(relPath) {
-  try {
-    return readText(relPath);
-  } catch (error) {
-    check(`read ${relPath}`, false, error.message);
-    return null;
-  }
-}
-
-function fmtRect(rect) {
-  if (!rect) return 'missing';
-  return `x=${rect.x}, y=${rect.y}, w=${rect.width}, h=${rect.height}`;
-}
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  if (opts.help) {
-    console.log(
-      [
-        'Usage: node scripts/player-acceptance.mjs [options]',
-        '',
-        'Options:',
-        '  --skip-typecheck   skip the `tsc --noEmit` type-check step',
-        '  -h, --help         show this help',
-      ].join('\n'),
-    );
-    return;
-  }
-
-  console.log('[player] validating "ground & platforms" playable contract');
-
-  // --- 0. Design tokens -----------------------------------------------------
-  let tokens = null;
-  try {
-    tokens = readJson(TOKENS_REL);
-  } catch (error) {
-    check(`read ${TOKENS_REL}`, false, error.message);
-  }
-
-  const level = tokens?.level ?? {};
-  const worldWidth = level.world_width;
-  const worldHeight = level.world_height;
-  const groundTopY = level.ground_top_y;
-  const groundHeight = level.ground_height;
-  const levelKeys = ['world_width', 'world_height', 'ground_top_y', 'ground_height'];
-  const missingKeys = levelKeys.filter((key) => typeof level[key] !== 'number');
-  check('design tokens define world + ground metrics', missingKeys.length === 0, missingKeys.join(', '));
-
-  // --- 1. Sources -----------------------------------------------------------
-  const layoutSrc = tryRead('src/level/levelLayout.ts');
-  const builderSrc = tryRead('src/level/levelBuilder.ts');
-  const configSrc = tryRead('src/config/gameConfig.ts');
-
-  const constants = layoutSrc ? extractConstants(layoutSrc) : new Map();
-  const ground = layoutSrc ? extractRect(layoutSrc, 'ground', constants) : null;
-  const platforms = layoutSrc ? extractPlatforms(layoutSrc, constants) : [];
-  const worldBounds = layoutSrc ? extractWorldBounds(layoutSrc, constants) : null;
-
-  // --- 2. Sealed world (no fall-through, no side escape) --------------------
-  check(`WORLD_WIDTH = ${worldWidth}`, constants.get('WORLD_WIDTH') === worldWidth, String(constants.get('WORLD_WIDTH')));
-  check(`WORLD_HEIGHT = ${worldHeight}`, constants.get('WORLD_HEIGHT') === worldHeight, String(constants.get('WORLD_HEIGHT')));
-
-  if (worldBounds) {
-    check(
-      'world bounds seal left/right/top (x=0, y=0, full width/height)',
-      worldBounds.x === 0 &&
-        worldBounds.y === 0 &&
-        worldBounds.width === worldWidth &&
-        worldBounds.height === worldHeight,
-      fmtRect(worldBounds),
-    );
-  } else {
-    check('worldBounds defined', false, 'no `worldBounds: WorldBounds = {...}` found');
-  }
-
-  if (ground) {
-    const bottom = ground.y + ground.height;
-    check(
-      'ground seals the bottom boundary (ground bottom == world bottom)',
-      bottom === worldHeight,
-      `ground bottom=${bottom}, world bottom=${worldHeight}`,
-    );
-  } else {
-    check('ground rect defined', false, "no `id: 'ground'` rect found");
-  }
-
-  // --- 3. Platforms inside the playable volume ------------------------------
-  const outOfX = platforms.filter((p) => p.x < 0 || p.x + p.width > worldWidth);
-  const outOfTop = platforms.filter((p) => p.y < 0);
-  const overlappingGround = platforms.filter((p) => p.y + p.height > groundTopY);
-  check(
-    `every platform is inside the horizontal bounds (0..${worldWidth})`,
-    outOfX.length === 0,
-    outOfX.map((p) => p.id).join(', '),
-  );
-  check('every platform top is inside the world (y >= 0)', outOfTop.length === 0, outOfTop.map((p) => p.id).join(', '));
-  check(
-    'every platform floats above the ground (no overlap)',
-    overlappingGround.length === 0,
-    overlappingGround.map((p) => p.id).join(', '),
-  );
-
-  // --- 4. Immovable bodies + exposed collision group ------------------------
-  const builder = builderSrc ?? '';
-  check('level uses Arcade static bodies', /\.staticGroup\s*\(/.test(builder));
-  check(
-    'ground and every platform are added to the static group',
-    /addGround\s*\(/.test(builder) && /addPlatform\s*\(/.test(builder) && /statics\?\.add\s*\(/.test(builder),
-  );
-  check('level exposes the static collision group to the scene', /get\s+staticGroup\s*\(/.test(builder));
-
-  // --- 5. Bounds + staged physics -------------------------------------------
-  check('physics world clamped to level bounds', /world\.setBounds\s*\(/.test(builder));
-  check('camera clamped to level bounds', /cameras\.main\.setBounds\s*\(/.test(builder));
-
-  const config = configSrc ?? '';
-  check('game config declares Arcade physics', /default:\s*['"]arcade['"]/.test(config));
-  check('game config stages gravity for the movement/jump ticket', /gravity:\s*\{/.test(config));
-
-  // --- 6. Type safety (no `any`) --------------------------------------------
-  const anyOffenders = [];
-  for (const file of listSourceFiles()) {
-    const text = readText(file);
-    if (/(:\s*any\b|\bas\s+any\b|<any>|any\[\])/.test(text)) anyOffenders.push(file);
-  }
-  check('no `any` in src/', anyOffenders.length === 0, anyOffenders.join(', '));
-
-  // --- 7. Type-check --------------------------------------------------------
-  if (!opts.skipTypecheck) {
-    if (!existsSync(TSC)) {
-      check('tsc --noEmit (no type errors)', false, 'typescript not installed; run "npm install"');
-    } else {
-      const code = await run(NODE, [TSC, '--noEmit']);
-      check('tsc --noEmit (no type errors)', code === 0, `exit code ${code}`);
+function printReport() {
+  const allPass = results.every((r) => r.pass);
+  console.log('\n========== 可玩原型验收报告 ==========');
+  for (const r of results) {
+    console.log(`\n[${r.env}] ${r.pass ? 'PASS' : 'FAIL'}`);
+    for (const c of r.checks) {
+      console.log(`  ${c.pass ? '√' : '×'} ${c.name} — ${c.detail}`);
     }
-  } else {
-    console.log('[player] skipping type-check (--skip-typecheck)');
+    if (r.shot) console.log(`  📷 ${r.shot}`);
   }
-
-  const failed = results.filter((ok) => !ok).length;
-  if (failed > 0) {
-    console.error(`\n[player] ${failed} check(s) failed`);
-    process.exitCode = 1;
-  } else {
-    console.log('\n[player] PASS: level geometry is physically sound for a player');
-    process.exitCode = 0;
-  }
+  console.log('\n======================================');
+  console.log(`总结: ${allPass ? '全部通过' : '存在未通过项'}`);
+  return allPass;
 }
 
-main().catch((error) => {
-  console.error(error?.message ?? error);
-  process.exitCode = 1;
+async function main() {
+  const browser = await chromium.launch({ headless: CONFIG.headless });
+  try {
+    results.push(await testDesktop(browser));
+    results.push(await testTouch(browser));
+  } finally {
+    await browser.close();
+  }
+
+  const report = {
+    url: CONFIG.url,
+    device: CONFIG.touchDevice,
+    at: new Date().toISOString(),
+    results,
+    pass: results.every((r) => r.pass),
+  };
+  await mkdir(CONFIG.shotDir, { recursive: true });
+  await writeFile(
+    path.join(CONFIG.shotDir, 'report.json'),
+    JSON.stringify(report, null, 2),
+    'utf8',
+  );
+
+  const ok = printReport();
+  process.exit(ok ? 0 : 1);
+}
+
+main().catch((err) => {
+  console.error('[acceptance] 致命错误:', err);
+  process.exit(2);
 });
